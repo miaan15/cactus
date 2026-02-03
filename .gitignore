@@ -1,0 +1,5 @@
+build/
+vendor/
+.cache/
+
+CLAUDE.md
