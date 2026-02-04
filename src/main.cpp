@@ -1,4 +1,5 @@
 #include <boost/container/vector.hpp>
+#include <chrono>
 #include <cstdlib>
 #include <ctime>
 
@@ -16,15 +17,15 @@ namespace bstc = boost::container;
 // Demo parameters
 constexpr int SCREEN_WIDTH = 1280;
 constexpr int SCREEN_HEIGHT = 720;
-constexpr int SCREEN_FPS = 60;
+constexpr int SCREEN_FPS = 144;
 
-constexpr int BOX_COUNT = 3600;
-constexpr float MIN_BOX_SIZE = 2.0;
-constexpr float MAX_BOX_SIZE = 5.0;
-constexpr float MIN_BOX_VEL = 10.0;
-constexpr float MAX_BOX_VEL = 60.0;
-constexpr float BOX_RESTITUTION = 1.0;
-constexpr float BOX_FRICTION = 0.0;
+constexpr int BOX_COUNT = 360;
+constexpr float MIN_BOX_SIZE = 5.0;
+constexpr float MAX_BOX_SIZE = 10.0;
+constexpr float MIN_BOX_VEL = 100.0;
+constexpr float MAX_BOX_VEL = 300.0;
+constexpr float BOX_RESTITUTION = 0.8;
+constexpr float BOX_FRICTION = 0.1;
 
 auto random_float(float min, float max) -> float {
     float normalized = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
@@ -43,7 +44,7 @@ auto main() -> int {
     srand(static_cast<unsigned>(time(nullptr)));
 
     PhysicsWorld world{};
-    world.margin = 1.0f;
+    world.margin = 2.0f;
 
     struct BoxData {
         ColliderKey key;
@@ -71,9 +72,21 @@ auto main() -> int {
         boxes.push_back({key, random_color()});
     }
 
+    float physics_time = 0.0f;
+    float draw_time = 0.0f;
+    float display_update_timer = 0.0f;
+    float physics_time_display, draw_time_display;
+    constexpr float DISPLAY_UPDATE_INTERVAL = 0.5f;
+
     while (!rl::WindowShouldClose()) {
         float dt = rl::GetFrameTime();
+        display_update_timer += dt;
 
+        for (auto &box: boxes) {
+            world.get(box.key)->vel.y -= -9.81 * 10 * dt;
+        }
+
+        auto physics_start = std::chrono::high_resolution_clock::now();
         world.update(dt);
 
         for (auto &box : boxes) {
@@ -98,6 +111,11 @@ auto main() -> int {
             }
         }
 
+        auto physics_end = std::chrono::high_resolution_clock::now();
+        physics_time =
+            std::chrono::duration<float, std::milli>(physics_end - physics_start).count();
+
+        auto draw_start = std::chrono::high_resolution_clock::now();
         rl::BeginDrawing();
         rl::ClearBackground(rl::RAYWHITE);
 
@@ -115,7 +133,22 @@ auto main() -> int {
                 static_cast<int>(halfexts.x * 2), static_cast<int>(halfexts.y * 2), rl::BLACK);
         }
 
+        auto draw_end = std::chrono::high_resolution_clock::now();
+        draw_time = std::chrono::duration<float, std::milli>(draw_end - draw_start).count();
+
         rl::DrawFPS(10, 10);
+
+        if (display_update_timer >= DISPLAY_UPDATE_INTERVAL) {
+            display_update_timer = 0.0f;
+        }
+
+        if (display_update_timer == 0.0f) {
+            physics_time_display = physics_time;
+            draw_time_display = draw_time;
+        }
+        rl::DrawText(rl::TextFormat("Physics: %.2f ms", physics_time_display), 10, 40, 20, rl::BLACK);
+        rl::DrawText(rl::TextFormat("Draw: %.2f ms", draw_time_display), 10, 65, 20, rl::BLACK);
+
         rl::EndDrawing();
     }
 
