@@ -96,18 +96,26 @@ export struct PhysicsWorld {
         return key;
     }
 
-    auto update([[maybe_unused]] float dt) -> void {
+    auto update(float dt) -> void {
         _tree_update();
-        _collided_aabbs = _tree_get_collided_pairs();
+        _collided_aabb_entries = _tree_get_collided_pairs();
+
+        for (auto [e0, e1] : _collided_aabb_entries) {
+            resolve_collider(e0, e1);
+        }
+
+        for (auto &entry : entries) {
+            entry.coll.center += entry.vel * dt;
+        }
     }
 
     auto is_collided(ColliderKey k0, ColliderKey k1) -> bool {
         if (k0.first > k1.first) std::swap(k0, k1);
 
-        auto it = std::lower_bound(_collided_aabbs.begin(), _collided_aabbs.end(),
+        auto it = std::lower_bound(_collided_aabb_entries.begin(), _collided_aabb_entries.end(),
                                    std::make_pair(k0, k1));
 
-        if (it != _collided_aabbs.end()) {
+        if (it != _collided_aabb_entries.end()) {
             return aabb_intersects(get_aabb(get(k0)->coll), get_aabb(get(k1)->coll));
         }
         return false;
@@ -192,7 +200,7 @@ export struct PhysicsWorld {
     }
 
     // AABBTree
-    bstc::vector<std::pair<ColliderKey, ColliderKey>> _collided_aabbs;
+    bstc::vector<std::pair<ColliderKey, ColliderKey>> _collided_aabb_entries;
 
     Node *_root;
 
