@@ -21,12 +21,12 @@ constexpr int SCREEN_FPS = 144;
 constexpr int BOX_COUNT = 360;
 constexpr float MIN_BOX_SIZE = 5.0;
 constexpr float MAX_BOX_SIZE = 10.0;
-constexpr float MIN_BOX_VEL = 100.0;
-constexpr float MAX_BOX_VEL = 300.0;
-constexpr float BOX_RESTITUTION = 0.8;
+constexpr float MIN_BOX_VEL = 1000.0;
+constexpr float MAX_BOX_VEL = 5000.0;
+constexpr float BOX_RESTITUTION = 0.9;
 constexpr float BOX_FRICTION = 0.1;
 
-constexpr auto COUNT = 1367;
+constexpr auto COUNT = 3636;
 
 auto random_float(float min, float max) -> float {
     float normalized = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
