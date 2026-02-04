@@ -12,7 +12,8 @@ import SlotMap;
 using namespace glm;
 namespace bstc = boost::container;
 
-auto operator==(const std::pair<unsigned, unsigned> &a, const std::pair<unsigned, unsigned> &b) -> bool {
+auto operator==(const std::pair<unsigned, unsigned> &a, const std::pair<unsigned, unsigned> &b)
+    -> bool {
     return a.first == b.first && a.second == b.second;
 }
 
@@ -23,22 +24,23 @@ export using AABB = mat2x2;
 
 export struct ColliderEntry {
     Collider collider;
+
+    void *node_ptr;
 };
 export using ColliderEntrySet = slot_map<ColliderEntry>;
 export using ColliderEntryKey = ColliderEntrySet::key_type;
 
 namespace _private {
-enum NodeType { NORMAL = 0, INERT = 1 };
 struct Node {
     Node *parent;
     Node *childs[2];
 
-    AABB aabb;
     ColliderEntryKey key;
 
-    uint8_t type : 1;
+    AABB aabb;
+
+    uint8_t flag : 7;
     uint8_t is_self_check : 1;
-    uint8_t __padding : 6;
 };
 struct FitNodeVal {
     Node *node;
@@ -50,93 +52,86 @@ using namespace _private;
 
 export struct PhysicsWorld {
     float margin;
+    ColliderEntrySet entries;
 
-    ColliderEntrySet _collider_entries;
-    Node *_root;
+private:
+    Node *root;
 
-    auto tree_insert(const Collider &collider, NodeType type = NORMAL) -> ColliderEntryKey {
-        auto entry_key = _collider_entries.emplace(collider);
-
-        if (_root == nullptr) {
+    auto tree_insert(const Collider &collider, uint8_t flag = 0) -> ColliderEntryKey {
+        if (root == nullptr) {
             auto *node = (Node *)malloc(sizeof(Node));
-            node->parent = node->childs[0] = node->childs[1] = nullptr;
-            node->is_self_check = false;
-            node->aabb = aabb_expand_margin(collider, margin);
-            node->key = entry_key;
-            node->type = type;
+            auto key = entries.emplace(collider, node);
+            *node = {.key = key, .aabb = aabb_expand_margin(collider, margin), .flag = flag};
 
-            _root = node;
+            root = node;
 
-            return entry_key;
+            return key;
         }
 
         AABB fat_aabb = aabb_expand_margin(collider, margin);
 
-        FitNodeVal best{.node = _root, .link = &_root, .value = aabb_volume(aabb_merge(fat_aabb, _root->aabb))};
-        tree_find_best_fitnode_helper(&best, fat_aabb, 0.0, _root, &_root);
+        FitNodeVal best{
+            .node = root, .link = &root, .value = aabb_volume(aabb_merge(fat_aabb, root->aabb))};
+        tree_find_best_fitnode_helper(&best, fat_aabb, 0.0, root, &root);
 
-        auto *new_node = (Node *)malloc(sizeof(Node));
-        new_node->childs[0] = new_node->childs[1] = nullptr;
-        new_node->is_self_check = false;
-        new_node->aabb = fat_aabb;
-        new_node->key = entry_key;
-        new_node->type = type;
+        auto *node = (Node *)malloc(sizeof(Node));
+        auto key = entries.emplace(collider, node);
+        *node = {.key = key, .aabb = fat_aabb, .flag = flag};
 
-        auto *new_parent = (Node *)malloc(sizeof(Node));
-        new_parent->is_self_check = false;
-        new_parent->aabb = aabb_merge(best.node->aabb, new_node->aabb);
-        new_parent->parent = best.node->parent;
-        new_parent->childs[0] = best.node;
-        new_parent->childs[1] = new_node;
-        new_parent->type = new_parent->childs[0]->type & new_parent->childs[1]->type;
+        auto *parent = (Node *)malloc(sizeof(Node));
+        *parent = {.parent = best.node->parent,
+                   .childs = {best.node, node},
+                   .aabb = aabb_merge(best.node->aabb, fat_aabb),
+                   .flag = static_cast<uint8_t>(best.node->flag & node->flag)};
 
-        best.node->parent = new_parent;
-        new_node->parent = new_parent;
-        *best.link = new_parent;
+        best.node->parent = parent;
+        node->parent = parent;
+        *best.link = parent;
 
-        auto *ucur_node = new_parent->parent;
+        auto *ucur_node = parent->parent;
         while (ucur_node != nullptr) {
-            ucur_node->type = ucur_node->childs[0]->type & ucur_node->childs[1]->type;
+            ucur_node->flag = ucur_node->childs[0]->flag & ucur_node->childs[1]->flag;
             ucur_node->aabb = aabb_merge(ucur_node->childs[0]->aabb, ucur_node->childs[1]->aabb);
             ucur_node = ucur_node->parent;
         }
 
-        return entry_key;
+        return key;
     }
 
-    auto tree_remove(ColliderEntryKey entry_key) -> bool {
-        if (_root == nullptr) return false;
-        if (tree_is_node_leaf(*_root)) {
-            if (entry_key == _root->key) {
-                _root = nullptr;
-                free(_root);
+    auto tree_remove(ColliderEntryKey key) -> bool {
+        if (root == nullptr) return false;
+        if (tree_is_node_leaf(*root)) {
+            if (key == root->key) {
+                root = nullptr;
+                free(root);
                 return true;
             }
             return false;
         }
-        return tree_remove_helper(entry_key, _root, &_root);
+        return tree_remove_helper(key, root, &root);
     }
 
     auto tree_update() -> void {
-        if (_root == nullptr) return;
-
-        if (tree_is_node_leaf(*_root)) {
-            if (!aabb_contains(_root->aabb, get_entry(_root->key)->collider)) {
-                _root->aabb = aabb_expand_margin(get_entry(_root->key)->collider, margin);
+        if (root == nullptr) return;
+        if (tree_is_node_leaf(*root)) {
+            auto &collider = get_entry(root->key)->collider;
+            if (!aabb_contains(root->aabb, collider)) {
+                root->aabb = aabb_expand_margin(collider, margin);
             }
             return;
         }
 
         bstc::vector<Node *> invalid_list{};
-        tree_get_invalid_nodes_helper(&invalid_list, _root);
+        tree_get_invalid_nodes_helper(&invalid_list, root);
 
         for (int i = 0; i < invalid_list.size(); i++) {
             auto *node = (Node *)invalid_list[i];
             auto *parent = node->parent;
             auto *sibling = node == parent->childs[0] ? parent->childs[1] : parent->childs[0];
-            auto **parent_link = parent->parent
-                                     ? (parent == parent->parent->childs[0] ? &parent->parent->childs[0] : &parent->parent->childs[1])
-                                     : &_root;
+            auto **parent_link =
+                parent->parent ? (parent == parent->parent->childs[0] ? &parent->parent->childs[0]
+                                                                      : &parent->parent->childs[1])
+                               : &root;
 
             sibling->parent = parent->parent ? parent->parent : nullptr;
             *parent_link = sibling;
@@ -149,22 +144,22 @@ export struct PhysicsWorld {
 
     auto tree_get_collided_pairs() -> bstc::vector<std::pair<ColliderEntryKey, ColliderEntryKey>> {
         bstc::vector<std::pair<ColliderEntryKey, ColliderEntryKey>> res{};
-        if (_root == nullptr) return res;
-        if (tree_is_node_leaf(*_root)) return res;
+        if (root == nullptr) return res;
+        if (tree_is_node_leaf(*root)) return res;
 
-        tree_uncheck_selfcheck_flag_helper(_root);
-        tree_get_collided_pairs_helper(&res, _root->childs[0], _root->childs[1]);
+        tree_uncheck_selfcheck_flag_helper(root);
+        tree_get_collided_pairs_helper(&res, root->childs[0], root->childs[1]);
 
         return res;
     }
 
     ~PhysicsWorld() {
-        tree_free_helper(_root);
+        tree_free_helper(root);
     }
 
 private:
     auto get_entry(ColliderEntryKey key) -> ColliderEntry * {
-        return &_collider_entries.at(key);
+        return &entries.at(key);
     }
 
     auto aabb_merge(const AABB &a, const AABB &b) -> AABB {
@@ -188,7 +183,8 @@ private:
         return node.childs[0] == nullptr;
     }
 
-    auto tree_find_best_fitnode_helper(FitNodeVal *best, AABB aabb, float acml_d, Node *cur, Node **cur_link) -> void {
+    auto tree_find_best_fitnode_helper(FitNodeVal *best, AABB aabb, float acml_d, Node *cur,
+                                       Node **cur_link) -> void {
         AABB merge_aabb = aabb_merge(aabb, cur->aabb);
 
         float cur_value = aabb_volume(merge_aabb) + acml_d;
@@ -202,8 +198,10 @@ private:
 
         float cur_delta = aabb_volume(merge_aabb) - aabb_volume(cur->aabb);
         if (aabb_volume(aabb) + cur_delta + acml_d < best->value) {
-            tree_find_best_fitnode_helper(best, aabb, acml_d + cur_delta, cur->childs[0], &cur->childs[0]);
-            tree_find_best_fitnode_helper(best, aabb, acml_d + cur_delta, cur->childs[1], &cur->childs[1]);
+            tree_find_best_fitnode_helper(best, aabb, acml_d + cur_delta, cur->childs[0],
+                                          &cur->childs[0]);
+            tree_find_best_fitnode_helper(best, aabb, acml_d + cur_delta, cur->childs[1],
+                                          &cur->childs[1]);
         }
     }
 
@@ -239,7 +237,7 @@ private:
 
         if (res) {
             cur->aabb = aabb_merge(cur->childs[0]->aabb, cur->childs[1]->aabb);
-            cur->type = cur->childs[0]->type & cur->childs[1]->type;
+            cur->flag = cur->childs[0]->flag & cur->childs[1]->flag;
         }
 
         return res;
@@ -257,38 +255,37 @@ private:
     }
 
     void tree_handle_reinsert_node(Node *node) {
-        auto &aabb = get_entry(node->key)->collider;
-        if (_root == nullptr) {
+        if (root == nullptr) {
             auto *node = (Node *)malloc(sizeof(Node));
-            node->parent = nullptr;
+            *node = {};
 
-            _root = node;
+            root = node;
 
             return;
         }
 
-        AABB fat_aabb = aabb_expand_margin(aabb, margin);
+        auto &collider = get_entry(node->key)->collider;
+        AABB fat_aabb = aabb_expand_margin(collider, margin);
 
-        FitNodeVal best{.node = _root, .link = &_root, .value = aabb_volume(aabb_merge(fat_aabb, _root->aabb))};
-        tree_find_best_fitnode_helper(&best, fat_aabb, 0.0, _root, &_root);
+        FitNodeVal best{
+            .node = root, .link = &root, .value = aabb_volume(aabb_merge(fat_aabb, root->aabb))};
+        tree_find_best_fitnode_helper(&best, fat_aabb, 0.0, root, &root);
 
         node->aabb = fat_aabb;
 
-        auto *new_parent = (Node *)malloc(sizeof(Node));
-        new_parent->is_self_check = false;
-        new_parent->aabb = aabb_merge(best.node->aabb, node->aabb);
-        new_parent->parent = best.node->parent;
-        new_parent->childs[0] = best.node;
-        new_parent->childs[1] = node;
-        new_parent->type = new_parent->childs[0]->type & new_parent->childs[1]->type;
+        auto *parent = (Node *)malloc(sizeof(Node));
+        *parent = {.parent = best.node->parent,
+                   .childs = {best.node, node},
+                   .aabb = aabb_merge(best.node->aabb, node->aabb),
+                   .flag = static_cast<uint8_t>(best.node->flag & node->flag)};
 
-        best.node->parent = new_parent;
-        node->parent = new_parent;
-        *best.link = new_parent;
+        best.node->parent = parent;
+        node->parent = parent;
+        *best.link = parent;
 
-        auto *ucur_node = new_parent->parent;
+        auto *ucur_node = parent->parent;
         while (ucur_node != nullptr) {
-            ucur_node->type = ucur_node->childs[0]->type & ucur_node->childs[1]->type;
+            ucur_node->flag = ucur_node->childs[0]->flag & ucur_node->childs[1]->flag;
             ucur_node->aabb = aabb_merge(ucur_node->childs[0]->aabb, ucur_node->childs[1]->aabb);
             ucur_node = ucur_node->parent;
         }
@@ -302,14 +299,18 @@ private:
         tree_uncheck_selfcheck_flag_helper(cur->childs[1]);
     }
 
-    void tree_handle_self_collide_pair(bstc::vector<std::pair<ColliderEntryKey, ColliderEntryKey>> *list, Node *node) {
+    void
+    tree_handle_self_collide_pair(bstc::vector<std::pair<ColliderEntryKey, ColliderEntryKey>> *list,
+                                  Node *node) {
         if (!node->is_self_check) {
             tree_get_collided_pairs_helper(list, node->childs[0], node->childs[1]);
             node->is_self_check = true;
         }
     }
-    void tree_get_collided_pairs_helper(bstc::vector<std::pair<ColliderEntryKey, ColliderEntryKey>> *list, Node *node0, Node *node1) {
-        if (node0->type == INERT && node1->type == INERT) return;
+    void tree_get_collided_pairs_helper(
+        bstc::vector<std::pair<ColliderEntryKey, ColliderEntryKey>> *list, Node *node0,
+        Node *node1) {
+        if ((node0->flag & node1->flag) != 0) return;
 
         if (tree_is_node_leaf(*node0) && tree_is_node_leaf(*node1)) {
             if (aabb_intersects(get_entry(node0->key)->collider, get_entry(node1->key)->collider)) {
@@ -319,14 +320,16 @@ private:
         }
 
         if (!aabb_intersects(node0->aabb, node1->aabb)) {
-            if (!tree_is_node_leaf(*node0) && node0->type != INERT) tree_handle_self_collide_pair(list, node0);
-            if (!tree_is_node_leaf(*node1) && node1->type != INERT) tree_handle_self_collide_pair(list, node1);
+            if (!tree_is_node_leaf(*node0) && node0->flag == 0)
+                tree_handle_self_collide_pair(list, node0);
+            if (!tree_is_node_leaf(*node1) && node1->flag == 0)
+                tree_handle_self_collide_pair(list, node1);
 
             return;
         }
 
         if (tree_is_node_leaf(*node0)) {
-            if (node1->type != INERT) tree_handle_self_collide_pair(list, node1);
+            if (node1->flag == 0) tree_handle_self_collide_pair(list, node1);
 
             tree_get_collided_pairs_helper(list, node0, node1->childs[0]);
             tree_get_collided_pairs_helper(list, node0, node1->childs[1]);
@@ -334,7 +337,7 @@ private:
             return;
         }
         if (tree_is_node_leaf(*node1)) {
-            if (node0->type != INERT) tree_handle_self_collide_pair(list, node0);
+            if (node0->flag == 0) tree_handle_self_collide_pair(list, node0);
 
             tree_get_collided_pairs_helper(list, node0->childs[0], node1);
             tree_get_collided_pairs_helper(list, node0->childs[1], node1);
@@ -342,8 +345,8 @@ private:
             return;
         }
 
-        if (node0->type != INERT) tree_handle_self_collide_pair(list, node0);
-        if (node1->type != INERT) tree_handle_self_collide_pair(list, node1);
+        if (node0->flag == 0) tree_handle_self_collide_pair(list, node0);
+        if (node1->flag == 0) tree_handle_self_collide_pair(list, node1);
 
         tree_get_collided_pairs_helper(list, node0->childs[0], node1->childs[0]);
         tree_get_collided_pairs_helper(list, node0->childs[0], node1->childs[1]);
