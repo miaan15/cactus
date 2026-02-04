@@ -83,8 +83,17 @@ export struct PhysicsWorld {
     float margin;
     ColliderEntrySet entries;
 
-    auto get_entry(ColliderKey key) -> ColliderEntry * {
+    auto get(ColliderKey key) -> ColliderEntry * {
         return &entries.at(key);
+    }
+
+    auto create(vec2 center = {0, 0}, vec2 halfexts = {.5, .5}, float invmass = 1,
+                float restitution = 1, float sfriction = 0, float dfriction = 0) -> ColliderKey {
+        auto key = entries.emplace((Collider){center, halfexts}, vec2(0, 0), invmass, restitution,
+                                   sfriction, dfriction, nullptr);
+        _tree_insert(key);
+
+        return key;
     }
 
     auto update([[maybe_unused]] float dt) -> void {
@@ -95,18 +104,18 @@ export struct PhysicsWorld {
     auto is_collided(ColliderKey k0, ColliderKey k1) -> bool {
         if (k0.first > k1.first) std::swap(k0, k1);
 
-        auto it = std::lower_bound(
-            _collided_aabbs.begin(), _collided_aabbs.end(), std::make_pair(k0, k1));
+        auto it = std::lower_bound(_collided_aabbs.begin(), _collided_aabbs.end(),
+                                   std::make_pair(k0, k1));
 
         if (it != _collided_aabbs.end()) {
-            return aabb_intersects(get_aabb(get_entry(k0)->coll), get_aabb(get_entry(k1)->coll));
+            return aabb_intersects(get_aabb(get(k0)->coll), get_aabb(get(k1)->coll));
         }
         return false;
     }
 
     auto resolve_collider(ColliderKey k0, ColliderKey k1) -> void {
-        auto e0 = get_entry(k0);
-        auto e1 = get_entry(k1);
+        auto e0 = get(k0);
+        auto e1 = get(k1);
 
         vec2 delta = e1->coll.center - e0->coll.center;
         vec2 overlap = (e0->coll.halfexts + e1->coll.halfexts) - abs(delta);
@@ -177,8 +186,8 @@ export struct PhysicsWorld {
     }
 
     auto get_entry_aabb(ColliderKey key, float dt) -> AABB {
-        auto entry_aabb = get_aabb(get_entry(key)->coll);
-        auto entry_vel = get_entry(key)->vel;
+        auto entry_aabb = get_aabb(get(key)->coll);
+        auto entry_vel = get(key)->vel;
         return aabb_merge(entry_aabb, aabb_move(entry_aabb, entry_vel * dt));
     }
 
@@ -190,9 +199,9 @@ export struct PhysicsWorld {
     auto _tree_insert(ColliderKey key, uint8_t flag = 0) -> ColliderKey {
         if (_root == nullptr) {
             auto *node = (Node *)malloc(sizeof(Node));
-            get_entry(key)->node_ptr = node;
+            get(key)->node_ptr = node;
             *node = {.key = key,
-                     .aabb = aabb_expand_margin(get_aabb(get_entry(key)->coll), margin),
+                     .aabb = aabb_expand_margin(get_aabb(get(key)->coll), margin),
                      .flag = flag};
 
             _root = node;
@@ -200,7 +209,7 @@ export struct PhysicsWorld {
             return key;
         }
 
-        auto entry_aabb = get_aabb(get_entry(key)->coll);
+        auto entry_aabb = get_aabb(get(key)->coll);
         AABB fat_aabb = aabb_expand_margin(entry_aabb, margin);
 
         FitNodeVal best{
@@ -208,7 +217,7 @@ export struct PhysicsWorld {
         _tree_find_best_fitnode_helper(&best, fat_aabb, 0.0, _root, &_root);
 
         auto *node = (Node *)malloc(sizeof(Node));
-        get_entry(key)->node_ptr = node;
+        get(key)->node_ptr = node;
         *node = {.key = key, .aabb = fat_aabb, .flag = flag};
 
         auto *parent = (Node *)malloc(sizeof(Node));
@@ -247,7 +256,7 @@ export struct PhysicsWorld {
     auto _tree_update() -> void {
         if (_root == nullptr) return;
         if (_tree_is_node_leaf(*_root)) {
-            auto entry_collider = get_aabb(get_entry(_root->key)->coll);
+            auto entry_collider = get_aabb(get(_root->key)->coll);
             if (!aabb_contains(_root->aabb, entry_collider)) {
                 _root->aabb = aabb_expand_margin(entry_collider, margin);
             }
@@ -316,7 +325,7 @@ export struct PhysicsWorld {
     bool _tree_remove_helper(ColliderKey entry_key, Node *cur, Node **cur_link) {
         bool res = false;
         if (!_tree_is_node_leaf(*cur->childs[0])) {
-            if (aabb_contains(cur->childs[0]->aabb, get_aabb(get_entry(entry_key)->coll))) {
+            if (aabb_contains(cur->childs[0]->aabb, get_aabb(get(entry_key)->coll))) {
                 res |= _tree_remove_helper(entry_key, cur->childs[0], &cur->childs[0]);
             }
         } else {
@@ -330,7 +339,7 @@ export struct PhysicsWorld {
         }
 
         if (!_tree_is_node_leaf(*cur->childs[1])) {
-            if (aabb_contains(cur->childs[1]->aabb, get_aabb(get_entry(entry_key)->coll))) {
+            if (aabb_contains(cur->childs[1]->aabb, get_aabb(get(entry_key)->coll))) {
                 res |= _tree_remove_helper(entry_key, cur->childs[1], &cur->childs[1]);
             }
         } else {
@@ -353,7 +362,7 @@ export struct PhysicsWorld {
 
     void _tree_get_invalid_nodes_helper(bstc::vector<Node *> *invalid_list, Node *cur) {
         if (_tree_is_node_leaf(*cur)) {
-            if (!aabb_contains(cur->aabb, get_aabb(get_entry(cur->key)->coll))) {
+            if (!aabb_contains(cur->aabb, get_aabb(get(cur->key)->coll))) {
                 invalid_list->emplace_back(cur);
             }
         } else {
@@ -372,7 +381,7 @@ export struct PhysicsWorld {
             return;
         }
 
-        auto entry_aabb = get_aabb(get_entry(node->key)->coll);
+        auto entry_aabb = get_aabb(get(node->key)->coll);
         AABB fat_aabb = aabb_expand_margin(entry_aabb, margin);
 
         FitNodeVal best{
@@ -419,8 +428,7 @@ export struct PhysicsWorld {
         if ((node0->flag & node1->flag) != 0) return;
 
         if (_tree_is_node_leaf(*node0) && _tree_is_node_leaf(*node1)) {
-            if (aabb_intersects(get_aabb(get_entry(node0->key)->coll),
-                                get_aabb(get_entry(node1->key)->coll))) {
+            if (aabb_intersects(get_aabb(get(node0->key)->coll), get_aabb(get(node1->key)->coll))) {
                 if (node0->key.first > node1->key.second) std::swap(node0->key, node1->key);
                 list->emplace_back(node0->key, node1->key);
             }
