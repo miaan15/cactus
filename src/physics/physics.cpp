@@ -58,9 +58,6 @@ export struct ColliderEntry {
 };
 export using ColliderEntrySet = slot_map<ColliderEntry>;
 export using ColliderKey = ColliderEntrySet::key_type;
-export auto is_collider_key_equal(const ColliderKey &a, const ColliderKey &b) -> bool {
-    return (a.first == b.first) && (a.second == b.second);
-}
 
 namespace _private {
 struct Node {
@@ -99,8 +96,7 @@ export struct PhysicsWorld {
         if (k0.first > k1.first) std::swap(k0, k1);
 
         auto it = std::lower_bound(
-            _collided_aabbs.begin(), _collided_aabbs.end(), k0,
-            [](const auto &element, ColliderKey val) { return element.first < val; });
+            _collided_aabbs.begin(), _collided_aabbs.end(), std::make_pair(k0, k1));
 
         if (it != _collided_aabbs.end()) {
             return aabb_intersects(get_aabb(get_entry(k0)->coll), get_aabb(get_entry(k1)->coll));
@@ -287,11 +283,7 @@ export struct PhysicsWorld {
         _tree_uncheck_selfcheck_flag_helper(_root);
         _tree_get_collided_pairs_helper(&res, _root->childs[0], _root->childs[1]);
 
-        std::sort(res.begin(), res.end(), [](const auto &p0, const auto &p1) {
-            if (p0.first == p1.first) return p0.second < p1.second;
-            return (p0.first < p1.first);
-        });
-
+        std::sort(res.begin(), res.end());
         return res;
     }
 
