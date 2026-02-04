@@ -1,5 +1,4 @@
 #include <boost/container/vector.hpp>
-#include <chrono>
 #include <cstdlib>
 #include <ctime>
 
@@ -26,6 +25,8 @@ constexpr float MIN_BOX_VEL = 100.0;
 constexpr float MAX_BOX_VEL = 300.0;
 constexpr float BOX_RESTITUTION = 0.8;
 constexpr float BOX_FRICTION = 0.1;
+
+constexpr auto COUNT = 1367;
 
 auto random_float(float min, float max) -> float {
     float normalized = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
@@ -72,50 +73,50 @@ auto main() -> int {
         boxes.push_back({key, random_color()});
     }
 
-    float physics_time = 0.0f;
-    float draw_time = 0.0f;
-    float display_update_timer = 0.0f;
-    float physics_time_display, draw_time_display;
-    constexpr float DISPLAY_UPDATE_INTERVAL = 0.5f;
-
+    size_t cur_count = 0;
+    bool pause = false;
+    size_t left = 0, right = 0;
     while (!rl::WindowShouldClose()) {
-        float dt = rl::GetFrameTime();
-        display_update_timer += dt;
+        if (!pause) {
+            float dt = rl::GetFrameTime();
 
-        for (auto &box: boxes) {
-            world.get(box.key)->vel.y -= -9.81 * 10 * dt;
+            for (auto &box : boxes) {
+                world.get(box.key)->vel.y -= -9.81 * 10 * dt;
+            }
+
+            world.update(dt);
+
+            for (auto &box : boxes) {
+                auto entry = world.get(box.key);
+                vec2 halfexts = entry->coll.halfexts;
+
+                if (entry->coll.center.x - halfexts.x < 0) {
+                    entry->coll.center.x = halfexts.x;
+                    entry->vel.x *= -1;
+                }
+                if (entry->coll.center.x + halfexts.x > SCREEN_WIDTH) {
+                    entry->coll.center.x = SCREEN_WIDTH - halfexts.x;
+                    entry->vel.x *= -1;
+                }
+                if (entry->coll.center.y - halfexts.y < 0) {
+                    entry->coll.center.y = halfexts.y;
+                    entry->vel.y *= -1;
+                }
+                if (entry->coll.center.y + halfexts.y > SCREEN_HEIGHT) {
+                    entry->coll.center.y = SCREEN_HEIGHT - halfexts.y;
+                    entry->vel.y *= -1;
+                }
+            }
+            if (++cur_count > COUNT) {
+                pause = true;
+
+                for (auto &box : boxes) {
+                    if (world.get(box.key)->coll.center.x < (float)SCREEN_WIDTH / 2) left++;
+                    else right++;
+                }
+            }
         }
 
-        auto physics_start = std::chrono::high_resolution_clock::now();
-        world.update(dt);
-
-        for (auto &box : boxes) {
-            auto entry = world.get(box.key);
-            vec2 halfexts = entry->coll.halfexts;
-
-            if (entry->coll.center.x - halfexts.x < 0) {
-                entry->coll.center.x = halfexts.x;
-                entry->vel.x *= -1;
-            }
-            if (entry->coll.center.x + halfexts.x > SCREEN_WIDTH) {
-                entry->coll.center.x = SCREEN_WIDTH - halfexts.x;
-                entry->vel.x *= -1;
-            }
-            if (entry->coll.center.y - halfexts.y < 0) {
-                entry->coll.center.y = halfexts.y;
-                entry->vel.y *= -1;
-            }
-            if (entry->coll.center.y + halfexts.y > SCREEN_HEIGHT) {
-                entry->coll.center.y = SCREEN_HEIGHT - halfexts.y;
-                entry->vel.y *= -1;
-            }
-        }
-
-        auto physics_end = std::chrono::high_resolution_clock::now();
-        physics_time =
-            std::chrono::duration<float, std::milli>(physics_end - physics_start).count();
-
-        auto draw_start = std::chrono::high_resolution_clock::now();
         rl::BeginDrawing();
         rl::ClearBackground(rl::RAYWHITE);
 
@@ -133,21 +134,17 @@ auto main() -> int {
                 static_cast<int>(halfexts.x * 2), static_cast<int>(halfexts.y * 2), rl::BLACK);
         }
 
-        auto draw_end = std::chrono::high_resolution_clock::now();
-        draw_time = std::chrono::duration<float, std::milli>(draw_end - draw_start).count();
+        // rl::DrawFPS(10, 10);
 
-        rl::DrawFPS(10, 10);
-
-        if (display_update_timer >= DISPLAY_UPDATE_INTERVAL) {
-            display_update_timer = 0.0f;
+        if (!pause) {
+            rl::DrawText(rl::TextFormat("%d", (int)((1.0 - (float)cur_count / COUNT) * 100.0)),
+                         SCREEN_WIDTH / 2 - 50, SCREEN_HEIGHT / 2 - 300, 100, rl::BLACK);
         }
-
-        if (display_update_timer == 0.0f) {
-            physics_time_display = physics_time;
-            draw_time_display = draw_time;
+        if (pause) {
+            rl::DrawText(rl::TextFormat("%d", left), 30, SCREEN_HEIGHT / 2 - 50, 100, rl::BLACK);
+            rl::DrawText(rl::TextFormat("%d", right), SCREEN_WIDTH / 2 + 30, SCREEN_HEIGHT / 2 - 50,
+                         100, rl::BLACK);
         }
-        rl::DrawText(rl::TextFormat("Physics: %.2f ms", physics_time_display), 10, 40, 20, rl::BLACK);
-        rl::DrawText(rl::TextFormat("Draw: %.2f ms", draw_time_display), 10, 65, 20, rl::BLACK);
 
         rl::EndDrawing();
     }
