@@ -85,12 +85,12 @@ struct SlotMap {
     constexpr auto operator[](KeyT key) -> Reference {
         auto sparse_iter = std::next(slots.begin(), get_idx(key));
         auto data_iter = std::next(data.begin(), get_idx(*sparse_iter));
-        return data_iter;
+        return *data_iter;
     }
     constexpr auto operator[](KeyT key) const -> ConstReference {
         auto sparse_iter = std::next(slots.begin(), get_idx(key));
         auto data_iter = std::next(data.begin(), get_idx(*sparse_iter));
-        return data_iter;
+        return *data_iter;
     }
 
     template <class... Args>
