@@ -6,21 +6,22 @@ module;
 #include <boost/container/vector.hpp>
 #include <cstdint>
 #include <optional>
+#include <utility>
 
 export module SlotMap;
 
 namespace cactus {
 
-[[nodiscard]] constexpr auto get_idx(uint64_t k) -> uint32_t {
+export [[nodiscard]] constexpr auto get_idx(uint64_t k) -> uint32_t {
     return static_cast<uint32_t>(k);
 }
-[[nodiscard]] constexpr auto get_gen(uint64_t k) -> uint32_t {
+export [[nodiscard]] constexpr auto get_gen(uint64_t k) -> uint32_t {
     return static_cast<uint32_t>(k >> 32);
 }
-constexpr auto set_idx(uint64_t *k, uint32_t value) -> void {
+export constexpr auto set_idx(uint64_t *k, uint32_t value) -> void {
     *k = (*k & ~0xFFFFFFFFULL) | value;
 }
-constexpr auto increase_gen(uint64_t *k) -> void {
+export constexpr auto increase_gen(uint64_t *k) -> void {
     k += (1ULL << 32);
 }
 
@@ -39,16 +40,17 @@ struct SlotMap {
     using ReverseIterator = typename ContainerT::reverse_iterator;
     using ConstReverseIterator = typename ContainerT::const_reverse_iterator;
     using SizeT = typename ContainerT::size_type;
-    using ValueT = typename ContainerT::data_type;
+    using ValueT = typename ContainerT::value_type;
 
-    static_assert(std::is_same<ValueT, T>::value, "Container<T>::data_type must be identical to T");
+    static_assert(std::is_same<ValueT, T>::value,
+                  "Container<T>::value_type must be identical to T");
 
     Container<KeyT> slots;
     Container<KeyIdxT> data_map;
     Container<ValueT> data;
     KeyIdxT next_slot_idx;
 
-    using SlotIterator = decltype(slots);
+    using SlotIterator = decltype(slots)::iterator;
 
     constexpr auto find(KeyT key) -> Iterator {
         auto sparse_idx = get_idx(key);
@@ -69,15 +71,15 @@ struct SlotMap {
         return std::next(data.begin(), get_idx(*sparse_iter));
     }
 
-    constexpr auto at(KeyT key) -> std::optional<Reference> {
+    constexpr auto at(KeyT key) -> std::optional<Pointer> {
         auto data_iter = this->find(key);
         if (data_iter == this->end()) return {};
-        return *data_iter;
+        return &*data_iter;
     }
-    constexpr auto at(KeyT key) const -> std::optional<ConstReference> {
+    constexpr auto at(KeyT key) const -> std::optional<ConstPointer> {
         auto data_iter = this->find(key);
         if (data_iter == this->end()) return {};
-        return *data_iter;
+        return &*data_iter;
     }
 
     constexpr auto operator[](KeyT key) -> Reference {
@@ -94,7 +96,7 @@ struct SlotMap {
     template <class... Args>
     constexpr auto emplace(Args &&...args) {
         auto data_pos = data.size();
-        data.emplace_back(std::forward(args)...);
+        data.emplace_back(std::forward<Args>(args)...);
         data_map.emplace_back(next_slot_idx);
 
         if (next_slot_idx == slots.size()) {
@@ -153,10 +155,10 @@ struct SlotMap {
     }
 
     constexpr auto erase(Iterator pos) -> Iterator {
-        return this->erase(const_iterator(pos));
+        return this->erase(ConstIterator(pos));
     }
     constexpr auto erase(Iterator first, Iterator last) -> Iterator {
-        return this->erase(const_iterator(first), const_iterator(last));
+        return this->erase(ConstIterator(first), ConstIterator(last));
     }
     constexpr auto erase(KeyT key) -> SizeT {
         auto iter = this->find(key);
@@ -236,7 +238,7 @@ struct SlotMap {
     }
 
     constexpr auto slot_iter_from_data_iter(ConstIterator data_iter) -> SlotIterator {
-        auto data_index = std::distance(const_iterator(data.begin()), data_iter);
+        auto data_index = std::distance(ConstIterator(data.begin()), data_iter);
         auto slot_index = *std::next(data_map.begin(), data_index);
         return std::next(slots.begin(), slot_index);
     }

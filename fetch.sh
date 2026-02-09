@@ -27,3 +27,8 @@ if [ ! -d "./vendor/boost" ]; then
     git submodule update --init libs/container
     cd ../..
 fi
+
+if [ ! -d "./vendor/gtest" ]; then
+    git clone --depth 1 --branch v1.17.0 https://github.com/google/googletest.git ./vendor/gtest
+fi
+

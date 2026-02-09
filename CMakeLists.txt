@@ -19,6 +19,7 @@ set(SRC_DIR "${CMAKE_SOURCE_DIR}/src")
 add_subdirectory(${VENDOR_DIR}/boost)
 add_subdirectory(${VENDOR_DIR}/raylib)
 add_subdirectory(${VENDOR_DIR}/glm)
+add_subdirectory(${VENDOR_DIR}/gtest)
 
 add_executable(app ${SRC_DIR}/main.cpp)
 
@@ -50,10 +51,12 @@ target_include_directories(app PRIVATE
     ${VENDOR_DIR}/boost/libs/move/include
     ${VENDOR_DIR}/boost/libs/intrusive/include
     ${VENDOR_DIR}/boost/libs/container/include
+
+    ${VENDOR_DIR}/gtest/googletest/include
 )
 
 target_link_libraries(app PRIVATE 
     raylib
     Boost::container
+    gtest
 )
-
