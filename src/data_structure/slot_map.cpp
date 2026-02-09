@@ -22,7 +22,7 @@ export constexpr auto set_idx(uint64_t *k, uint32_t value) -> void {
     *k = (*k & ~0xFFFFFFFFULL) | value;
 }
 export constexpr auto increase_gen(uint64_t *k) -> void {
-    k += (1ULL << 32);
+    *k += (1ULL << 32);
 }
 
 export template <typename T, template <class...> class Container = boost::container::vector>
@@ -100,9 +100,9 @@ struct SlotMap {
         data_map.emplace_back(next_slot_idx);
 
         if (next_slot_idx == slots.size()) {
-            slots.emplace_back(++next_slot_idx); // temporary set new slot idx = next_slot_idx + 1
-                                                 // for later update of next_slot_idx (equal
-                                                 // next_slot_idx + 1 if this branch true)
+            slots.emplace_back(next_slot_idx + 1); // temporary set new slot idx = next_slot_idx + 1
+                                                   // for later update of next_slot_idx (equal
+                                                   // next_slot_idx + 1 if this branch true)
         }
 
         auto slot_iter = std::next(slots.begin(), next_slot_idx);
