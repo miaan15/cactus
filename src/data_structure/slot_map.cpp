@@ -13,16 +13,17 @@ export module SlotMap;
 namespace cactus {
 
 export [[nodiscard]] constexpr auto get_idx(uint64_t k) -> uint32_t {
-    return static_cast<uint32_t>(k);
-}
-export [[nodiscard]] constexpr auto get_gen(uint64_t k) -> uint32_t {
     return static_cast<uint32_t>(k >> 32);
 }
+export [[nodiscard]] constexpr auto get_gen(uint64_t k) -> uint32_t {
+    return static_cast<uint32_t>(k);
+}
 export constexpr auto set_idx(uint64_t *k, uint32_t value) -> void {
-    *k = (*k & ~0xFFFFFFFFULL) | value;
+    *k = (*k & 0xFFFFFFFFULL) | (static_cast<uint64_t>(value) << 32);
 }
 export constexpr auto increase_gen(uint64_t *k) -> void {
-    *k += (1ULL << 32);
+    uint32_t gen = static_cast<uint32_t>(*k) + 1;
+    *k = (*k & ~0xFFFFFFFFULL) | static_cast<uint64_t>(gen);
 }
 
 export template <typename T, template <class...> class Container = boost::container::vector>
@@ -100,16 +101,18 @@ struct SlotMap {
         data_map.emplace_back(next_slot_idx);
 
         if (next_slot_idx == slots.size()) {
-            slots.emplace_back(next_slot_idx + 1); // temporary set new slot idx = next_slot_idx + 1
-                                                   // for later update of next_slot_idx (equal
-                                                   // next_slot_idx + 1 if this branch true)
+            slots.emplace_back(static_cast<KeyT>(next_slot_idx + 1) << 32);
+            // temporary set new slot idx = next_slot_idx + 1 for later update of next_slot_idx
+            // (equal next_slot_idx + 1 if this branch true)
         }
 
         auto slot_iter = std::next(slots.begin(), next_slot_idx);
         next_slot_idx = get_idx(*slot_iter);
         set_idx(&*slot_iter, data_pos);
-        return (*slot_iter & ~0xFFFFFFFFULL)
-               | static_cast<KeyIdxT>(std::distance(slots.begin(), slot_iter));
+
+        KeyT res = *slot_iter;
+        set_idx(&res, std::distance(slots.begin(), slot_iter));
+        return res;
     }
 
     constexpr auto insert(const ValueT &value) -> KeyT {

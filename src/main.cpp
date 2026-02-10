@@ -173,14 +173,15 @@ using cactus::SlotMap;
 // Helper key utilities
 // ---------------------------------------------------------------------------
 
-TEST(SlotMapKeyHelpers, GetIdxReturnsLower32Bits) {
+
+TEST(SlotMapKeyHelpers, GetIdxReturnsUpper32Bits) {
     uint64_t key = 0x0000'0003'0000'0005ULL;
-    EXPECT_EQ(get_idx(key), 5u);
+    EXPECT_EQ(get_idx(key), 3u);
 }
 
-TEST(SlotMapKeyHelpers, GetGenReturnsUpper32Bits) {
+TEST(SlotMapKeyHelpers, GetGenReturnsLower32Bits) {
     uint64_t key = 0x0000'0003'0000'0005ULL;
-    EXPECT_EQ(get_gen(key), 3u);
+    EXPECT_EQ(get_gen(key), 5u);
 }
 
 // ---------------------------------------------------------------------------
