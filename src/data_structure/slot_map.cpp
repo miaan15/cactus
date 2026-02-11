@@ -54,22 +54,22 @@ struct SlotMap {
     using SlotIterator = decltype(slots)::iterator;
 
     constexpr auto find(KeyT key) -> Iterator {
-        auto sparse_idx = get_idx(key);
-        if (sparse_idx >= slots.size()) return end();
+        auto slot_idx = get_idx(key);
+        if (slot_idx >= slots.size()) return end();
 
-        auto sparse_iter = std::next(slots.begin(), sparse_idx);
-        if (get_gen(*sparse_iter) != get_gen(key)) return end();
+        auto slot_iter = std::next(slots.begin(), slot_idx);
+        if (get_gen(*slot_iter) != get_gen(key)) return end();
 
-        return std::next(data.begin(), get_idx(*sparse_iter));
+        return std::next(data.begin(), get_idx(*slot_iter));
     }
     constexpr auto find(KeyT key) const -> ConstIterator {
-        auto sparse_idx = get_idx(key);
-        if (sparse_idx >= slots.size()) return end();
+        auto slot_idx = get_idx(key);
+        if (slot_idx >= slots.size()) return end();
 
-        auto sparse_iter = std::next(slots.begin(), sparse_idx);
-        if (get_gen(*sparse_iter) != get_gen(key)) return end();
+        auto slot_iter = std::next(slots.begin(), slot_idx);
+        if (get_gen(*slot_iter) != get_gen(key)) return end();
 
-        return std::next(data.begin(), get_idx(*sparse_iter));
+        return std::next(data.begin(), get_idx(*slot_iter));
     }
 
     constexpr auto at(KeyT key) -> std::optional<Pointer> {
@@ -84,13 +84,13 @@ struct SlotMap {
     }
 
     constexpr auto operator[](KeyT key) -> Reference {
-        auto sparse_iter = std::next(slots.begin(), get_idx(key));
-        auto data_iter = std::next(data.begin(), get_idx(*sparse_iter));
+        auto slot_iter = std::next(slots.begin(), get_idx(key));
+        auto data_iter = std::next(data.begin(), get_idx(*slot_iter));
         return *data_iter;
     }
     constexpr auto operator[](KeyT key) const -> ConstReference {
-        auto sparse_iter = std::next(slots.begin(), get_idx(key));
-        auto data_iter = std::next(data.begin(), get_idx(*sparse_iter));
+        auto slot_iter = std::next(slots.begin(), get_idx(key));
+        auto data_iter = std::next(data.begin(), get_idx(*slot_iter));
         return *data_iter;
     }
 
