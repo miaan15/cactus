@@ -38,7 +38,7 @@ struct Pool {
     using reverse_data_iterator = typename data_container_type::reverse_iterator;
     using const_reverse_data_iterator = typename data_container_type::const_reverse_iterator;
 
-    template <typename _Pointer, typename _Reference, typename _DataPointer>
+    template <typename _Pointer, typename _Reference, typename _Data>
     struct _iterator {
         using iterator_category = std::random_access_iterator_tag;
 
@@ -48,18 +48,18 @@ struct Pool {
         using pointer = _Pointer;
         using reference = _Reference;
 
-        _iterator(_DataPointer root, size_type index) : _root(root), _index(index) {}
+        _iterator(_Data *data, size_type index) : _data(data), _index(index) {}
 
         reference operator*() const {
-            return _root[_index].value;
+            return _data->data()[_index].value;
         }
         pointer operator->() {
-            return &_root[_index].value;
+            return &_data->data()[_index].value;
         }
 
         _iterator &operator++() {
             ++_index;
-            while (!_root[_index].valid) ++_index;
+            while (!_data->data()[_index].valid && _index < _data->size()) ++_index;
             return *this;
         }
         _iterator operator++(int) {
@@ -69,7 +69,7 @@ struct Pool {
         }
         _iterator &operator--() {
             --_index;
-            while (!_root[_index].valid) --_index;
+            while (!_data->data()[_index].valid) --_index;
             return *this;
         }
         _iterator operator--(int) {
@@ -79,18 +79,18 @@ struct Pool {
         }
 
         friend bool operator==(const _iterator &a, const _iterator &b) {
-            return a._root == b._root && a._index == b._index;
+            return a._data->data() == b._data->data() && a._index == b._index;
         };
         friend bool operator!=(const _iterator &a, const _iterator &b) {
             return !(a == b);
         };
 
-        _DataPointer _root;
+        _Data *_data;
         size_type _index;
     };
 
-    using iterator = _iterator<pointer, reference, data_pointer>;
-    using const_iterator = _iterator<const_pointer, const_reference, const_data_pointer>;
+    using iterator = _iterator<pointer, reference, data_container_type>;
+    using const_iterator = _iterator<const_pointer, const_reference, const data_container_type>;
     using reverse_iterator = std::reverse_iterator<iterator>;
     using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
@@ -125,14 +125,14 @@ struct Pool {
             auto x = data_element_type{.valid = true};
             x.value = {std::forward<Args>(args)...};
             data.emplace_back(x);
-            return iterator(data.data(), data.size() - 1);
+            return iterator(&data, data.size() - 1);
         } else {
             auto index = next_free_index;
             next_free_index = data[next_free_index].next;
             auto data_iter = std::next(data.begin(), index);
             data_iter->value = {std::forward<Args>(args)...};
             data_iter->valid = true;
-            return iterator(data.data(), index);
+            return iterator(&data, index);
         }
     }
 
@@ -180,22 +180,22 @@ struct Pool {
     }
 
     constexpr iterator begin() {
-        return iterator(data.data(), 0);
+        return iterator(&data, 0);
     }
     constexpr iterator end() {
-        return iterator(data.data(), data.size());
+        return iterator(&data, data.size());
     }
     constexpr const_iterator begin() const {
-        return const_iterator(data.data(), 0);
+        return const_iterator(&data, 0);
     }
     constexpr const_iterator end() const {
-        return const_iterator(data.data(), data.size());
+        return const_iterator(&data, data.size());
     }
     constexpr const_iterator cbegin() const {
-        return const_iterator(data.data(), 0);
+        return const_iterator(&data, 0);
     }
     constexpr const_iterator cend() const {
-        return const_iterator(data.data(), data.size());
+        return const_iterator(&data, data.size());
     }
     constexpr reverse_iterator rbegin() {
         return reverse_iterator(end());
