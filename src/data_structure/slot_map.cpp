@@ -27,7 +27,9 @@ export constexpr auto increase_gen(uint64_t *k) -> void {
 }
 
 export template <typename T, template <class...> class Container = boost::container::vector>
+    requires std::is_same<typename Container<T>::value_type, T>::value
 struct SlotMap {
+    using ValueT = T;
     using KeyT = uint64_t;
     using KeyIdxT = uint32_t;
     using KeyGenT = uint32_t;
@@ -41,10 +43,6 @@ struct SlotMap {
     using ReverseIterator = typename ContainerT::reverse_iterator;
     using ConstReverseIterator = typename ContainerT::const_reverse_iterator;
     using SizeT = typename ContainerT::size_type;
-    using ValueT = typename ContainerT::value_type;
-
-    static_assert(std::is_same<ValueT, T>::value,
-                  "Container<T>::value_type must be identical to T");
 
     Container<KeyT> slots;
     Container<KeyIdxT> data_map;
@@ -237,7 +235,7 @@ struct SlotMap {
         return data.size();
     }
     constexpr auto capacity() const -> SizeT {
-        return data.size();
+        return data.capacity();
     }
 
     constexpr auto slot_iter_from_data_iter(ConstIterator data_iter) -> SlotIterator {
