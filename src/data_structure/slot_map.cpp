@@ -29,29 +29,29 @@ export constexpr auto increase_gen(uint64_t *k) -> void {
 export template <typename T, template <class...> class Container = boost::container::vector>
     requires std::is_same<typename Container<T>::value_type, T>::value
 struct SlotMap {
-    using ValueT = T;
-    using KeyT = uint64_t;
-    using KeyIdxT = uint32_t;
-    using KeyGenT = uint32_t;
-    using ContainerT = Container<T>;
-    using Reference = typename ContainerT::reference;
-    using ConstReference = typename ContainerT::const_reference;
-    using Pointer = typename ContainerT::pointer;
-    using ConstPointer = typename ContainerT::const_pointer;
-    using Iterator = typename ContainerT::iterator;
-    using ConstIterator = typename ContainerT::const_iterator;
-    using ReverseIterator = typename ContainerT::reverse_iterator;
-    using ConstReverseIterator = typename ContainerT::const_reverse_iterator;
-    using SizeT = typename ContainerT::size_type;
+    using value_type = T;
+    using key_type = uint64_t;
+    using key_index_type = uint32_t;
+    using key_gen_type = uint32_t;
+    using container_type = Container<T>;
+    using reference = typename container_type::reference;
+    using const_reference = typename container_type::const_reference;
+    using pointer = typename container_type::pointer;
+    using const_pointer = typename container_type::const_pointer;
+    using iterator = typename container_type::iterator;
+    using const_iterator = typename container_type::const_iterator;
+    using reverse_iterator = typename container_type::reverse_iterator;
+    using const_reverse_iterator = typename container_type::const_reverse_iterator;
+    using size_type = typename container_type::size_type;
 
-    Container<KeyT> slots;
-    Container<KeyIdxT> data_map;
-    Container<ValueT> data;
-    KeyIdxT next_slot_idx;
+    Container<key_type> slots;
+    Container<key_index_type> data_map;
+    Container<value_type> data;
+    key_index_type next_slot_idx = 0;
 
-    using SlotIterator = decltype(slots)::iterator;
+    using slot_iterator = decltype(slots)::iterator;
 
-    constexpr auto find(KeyT key) -> Iterator {
+    constexpr auto find(key_type key) -> iterator {
         auto slot_idx = get_idx(key);
         if (slot_idx >= slots.size()) return end();
 
@@ -60,7 +60,7 @@ struct SlotMap {
 
         return std::next(data.begin(), get_idx(*slot_iter));
     }
-    constexpr auto find(KeyT key) const -> ConstIterator {
+    constexpr auto find(key_type key) const -> const_iterator {
         auto slot_idx = get_idx(key);
         if (slot_idx >= slots.size()) return end();
 
@@ -70,23 +70,23 @@ struct SlotMap {
         return std::next(data.begin(), get_idx(*slot_iter));
     }
 
-    constexpr auto at(KeyT key) -> std::optional<Pointer> {
+    constexpr auto at(key_type key) -> std::optional<pointer> {
         auto data_iter = this->find(key);
         if (data_iter == this->end()) return {};
         return &*data_iter;
     }
-    constexpr auto at(KeyT key) const -> std::optional<ConstPointer> {
+    constexpr auto at(key_type key) const -> std::optional<const_pointer> {
         auto data_iter = this->find(key);
         if (data_iter == this->end()) return {};
         return &*data_iter;
     }
 
-    constexpr auto operator[](KeyT key) -> Reference {
+    constexpr auto operator[](key_type key) -> reference {
         auto slot_iter = std::next(slots.begin(), get_idx(key));
         auto data_iter = std::next(data.begin(), get_idx(*slot_iter));
         return *data_iter;
     }
-    constexpr auto operator[](KeyT key) const -> ConstReference {
+    constexpr auto operator[](key_type key) const -> const_reference {
         auto slot_iter = std::next(slots.begin(), get_idx(key));
         auto data_iter = std::next(data.begin(), get_idx(*slot_iter));
         return *data_iter;
@@ -99,7 +99,7 @@ struct SlotMap {
         data_map.emplace_back(next_slot_idx);
 
         if (next_slot_idx == slots.size()) {
-            slots.emplace_back(static_cast<KeyT>(next_slot_idx + 1) << 32);
+            slots.emplace_back(static_cast<key_type>(next_slot_idx + 1) << 32);
             // temporary set new slot idx = next_slot_idx + 1 for later update of next_slot_idx
             // (equal next_slot_idx + 1 if this branch true)
         }
@@ -108,19 +108,19 @@ struct SlotMap {
         next_slot_idx = get_idx(*slot_iter);
         set_idx(&*slot_iter, data_pos);
 
-        KeyT res = *slot_iter;
+        key_type res = *slot_iter;
         set_idx(&res, std::distance(slots.begin(), slot_iter));
         return res;
     }
 
-    constexpr auto insert(const ValueT &value) -> KeyT {
+    constexpr auto insert(const value_type &value) -> key_type {
         return this->emplace(value);
     }
-    constexpr auto insert(ValueT &&value) -> KeyT {
+    constexpr auto insert(value_type &&value) -> key_type {
         return this->emplace(std::move(value));
     }
 
-    constexpr auto erase(ConstIterator pos) -> Iterator {
+    constexpr auto erase(const_iterator pos) -> iterator {
         auto slot_iter = slot_iter_from_data_iter(pos);
         auto data_idx = get_idx(*slot_iter);
         auto data_iter = std::next(data.begin(), data_idx);
@@ -144,7 +144,7 @@ struct SlotMap {
         return std::next(data.begin(), data_idx);
     }
 
-    constexpr auto erase(ConstIterator first, ConstIterator last) -> Iterator {
+    constexpr auto erase(const_iterator first, const_iterator last) -> iterator {
         auto first_index = std::distance(this->cbegin(), first);
         auto last_index = std::distance(this->cbegin(), last);
         while (last_index != first_index) {
@@ -155,22 +155,21 @@ struct SlotMap {
         return std::next(this->begin(), first_index);
     }
 
-    constexpr auto erase(Iterator pos) -> Iterator {
-        return this->erase(ConstIterator(pos));
+    constexpr auto erase(iterator pos) -> iterator {
+        return this->erase(const_iterator(pos));
     }
-    constexpr auto erase(Iterator first, Iterator last) -> Iterator {
-        return this->erase(ConstIterator(first), ConstIterator(last));
+    constexpr auto erase(iterator first, iterator last) -> iterator {
+        return this->erase(const_iterator(first), const_iterator(last));
     }
-    constexpr auto erase(KeyT key) -> SizeT {
+    constexpr auto erase(key_type key) -> iterator {
         auto iter = this->find(key);
         if (iter == this->end()) {
-            return 0;
+            return end();
         }
-        this->erase(iter);
-        return 1;
+        return this->erase(iter);
     }
 
-    constexpr auto reserve(SizeT n) -> void {
+    constexpr auto reserve(size_type n) -> void {
         data.reserve(n);
         data_map.reserve(n);
         slots.reserve(n);
@@ -191,55 +190,55 @@ struct SlotMap {
         swap(next_slot_idx, rhs.next_slot_idx);
     }
 
-    constexpr Iterator begin() {
+    constexpr iterator begin() {
         return data.begin();
     }
-    constexpr Iterator end() {
+    constexpr iterator end() {
         return data.end();
     }
-    constexpr ConstIterator begin() const {
+    constexpr const_iterator begin() const {
         return data.begin();
     }
-    constexpr ConstIterator end() const {
+    constexpr const_iterator end() const {
         return data.end();
     }
-    constexpr ConstIterator cbegin() const {
+    constexpr const_iterator cbegin() const {
         return data.begin();
     }
-    constexpr ConstIterator cend() const {
+    constexpr const_iterator cend() const {
         return data.end();
     }
-    constexpr ReverseIterator rbegin() {
+    constexpr reverse_iterator rbegin() {
         return data.rbegin();
     }
-    constexpr ReverseIterator rend() {
+    constexpr reverse_iterator rend() {
         return data.rend();
     }
-    constexpr ConstReverseIterator rbegin() const {
+    constexpr const_reverse_iterator rbegin() const {
         return data.rbegin();
     }
-    constexpr ConstReverseIterator rend() const {
+    constexpr const_reverse_iterator rend() const {
         return data.rend();
     }
-    constexpr ConstReverseIterator crbegin() const {
+    constexpr const_reverse_iterator crbegin() const {
         return data.rbegin();
     }
-    constexpr ConstReverseIterator crend() const {
+    constexpr const_reverse_iterator crend() const {
         return data.rend();
     }
 
     constexpr auto empty() const -> bool {
         return data.size() == 0;
     }
-    constexpr auto size() const -> SizeT {
+    constexpr auto size() const -> size_type {
         return data.size();
     }
-    constexpr auto capacity() const -> SizeT {
+    constexpr auto capacity() const -> size_type {
         return data.capacity();
     }
 
-    constexpr auto slot_iter_from_data_iter(ConstIterator data_iter) -> SlotIterator {
-        auto data_index = std::distance(ConstIterator(data.begin()), data_iter);
+    constexpr auto slot_iter_from_data_iter(const_iterator data_iter) -> slot_iterator {
+        auto data_index = std::distance(const_iterator(data.begin()), data_iter);
         auto slot_index = *std::next(data_map.begin(), data_index);
         return std::next(slots.begin(), slot_index);
     }
