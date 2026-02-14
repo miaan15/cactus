@@ -38,7 +38,7 @@ struct SmallWorld {
         size_t row;
     };
     struct ArchetypeTable {
-        std::byte *data_ptr;
+        std::byte *ptr;
         size_t size;
         size_t capacity;
         size_t prefab_size;
@@ -67,8 +67,14 @@ struct SmallWorld {
     }
 
     template <size_t I, typename... Us>
+        requires(I < sizeof...(Us))
     struct type_at;
+    template <typename U, typename... Us>
+    struct type_at<0, U, Us...> {
+        using type = U;
+    };
     template <size_t I, typename U, typename... Us>
+        requires(I < sizeof...(Us) + 1)
     struct type_at<I, U, Us...> {
         using type = std::conditional_t<I == 0, U, typename type_at<I - 1, Us...>::type>;
     };
@@ -85,23 +91,24 @@ struct SmallWorld {
         return sizeof(component_of_t<Id>);
     }
 
-    template <size_t Id, Signature S>
-    static consteval auto component_offset() -> size_t {
-        size_t offset = 0;
-        for (auto i = 0; i < Id; ++i) offset += ((S >> i) & 1) != 0 ? component_size<i>() : 0;
-        return offset;
+    template <size_t Id>
+    constexpr auto component_offset(Signature signature) -> size_t {
+        auto cal = [&]<std::size_t... Is>(std::index_sequence<Is...>) -> size_t {
+            return (((signature >> Is) & 1 ? component_size<Is>() : 0) + ...);
+        };
+        return cal(std::make_index_sequence<Id>{});
     }
 
     template <typename T>
         requires(is_components_contain<T>())
     auto get(Entity entity) -> std::optional<T *> {
-        auto component = component_id<T>();
+        constexpr auto component = component_id<T>();
         auto signature = entity_specs[entity].signature;
 
         if (((signature >> component) & 1) == 0) return {};
 
         auto &archetype = archetypes[signature];
-        auto column = component_offset<component, signature>();
+        auto column = component_offset<component>(signature);
         auto row = entity_specs[entity].row;
 
         return (T *)((archetype.ptr + row * archetype.prefab_size) + column);
@@ -110,9 +117,9 @@ struct SmallWorld {
     template <typename T, typename... Args>
         requires(is_components_contain<T>())
     auto emplace(Entity entity, Args... args) {
-        auto component = component_id<T>();
+        constexpr auto component = component_id<T>();
         auto signature = entity_specs[entity].signature;
-        auto column = component_offset<component, signature>();
+        auto column = component_offset<component>(signature);
 
         if (((signature >> component_id<T>()) & 1) != 0) [[unlikely]] {
             auto &archetype = archetypes[signature];
@@ -130,14 +137,14 @@ struct SmallWorld {
             ++new_archetype.size;
             if (new_archetype.size > new_archetype.capacity) {
                 new_archetype.capacity = new_archetype.capacity + (new_archetype.capacity >> 1);
-                new_archetype.ptr =
-                    realloc(new_archetype.ptr, new_archetype.capacity * new_archetype.prefab_size);
+                new_archetype.ptr = (std::byte *)realloc(
+                    new_archetype.ptr, new_archetype.capacity * new_archetype.prefab_size);
             }
 
-            memcpy(old_archetype, new_archetype, column);
+            memcpy(old_archetype.ptr, new_archetype.ptr, column);
             *(T *)((new_archetype.ptr + entity_specs[entity].row * new_archetype.prefab_size)
                    + column) = {std::forward<Args>(args)...};
-            memcpy(old_archetype + column, new_archetype + column + sizeof(T),
+            memcpy(old_archetype.ptr + column, new_archetype.ptr + column + sizeof(T),
                    new_archetype.prefab_size - (column + sizeof(T)));
         }
     }
@@ -145,12 +152,12 @@ struct SmallWorld {
     template <typename T>
         requires(is_components_contain<T>())
     auto erase(Entity entity) -> void {
+        constexpr auto component = component_id<T>();
         auto signature = entity_specs[entity].signature;
-        auto component = component_id<T>();
 
         if (((signature >> component) & 1) == 0) return;
 
-        auto column = component_offset<component, signature>();
+        auto column = component_offset<component>(signature);
         auto new_signature = signature & ~(1 << component);
         auto &old_archetype = archetypes[signature];
         auto &new_archetype = archetypes[new_signature];
@@ -161,12 +168,12 @@ struct SmallWorld {
         ++new_archetype.size;
         if (new_archetype.size > new_archetype.capacity) {
             new_archetype.capacity = new_archetype.capacity + (new_archetype.capacity >> 1);
-            new_archetype.ptr =
-                realloc(new_archetype.ptr, new_archetype.capacity * new_archetype.prefab_size);
+            new_archetype.ptr = (std::byte *)realloc(
+                new_archetype.ptr, new_archetype.capacity * new_archetype.prefab_size);
         }
 
-        memcpy(old_archetype, new_archetype, column);
-        memcpy(old_archetype + column + sizeof(T), new_archetype + column,
+        memcpy(old_archetype.ptr, new_archetype.ptr, column);
+        memcpy(old_archetype.ptr + column + sizeof(T), new_archetype.ptr + column,
                old_archetype.prefab_size - (column + sizeof(T)));
 
         auto last_old_row_ptr = old_archetype.ptr + old_archetype.size * old_archetype.prefab_size;

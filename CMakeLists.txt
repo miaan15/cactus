@@ -15,6 +15,7 @@ endif()
 
 set(VENDOR_DIR ${CMAKE_SOURCE_DIR}/vendor)
 set(SRC_DIR "${CMAKE_SOURCE_DIR}/src")
+set(TEST_DIR "${CMAKE_SOURCE_DIR}/test")
 
 add_subdirectory(${VENDOR_DIR}/boost)
 add_subdirectory(${VENDOR_DIR}/raylib)
@@ -27,6 +28,8 @@ file(GLOB_RECURSE SRCS CONFIGURE_DEPENDS "${SRC_DIR}/*.cpp")
 list(REMOVE_ITEM SRCS
     ${SRC_DIR}/main.cpp
 )
+
+file(GLOB_RECURSE TEST_SRCS CONFIGURE_DEPENDS "${TEST_DIR}/main.cpp")
 
 target_sources(app
     PUBLIC
