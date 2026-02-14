@@ -41,10 +41,8 @@ struct Pool {
     template <typename _Pointer, typename _Reference, typename _Data>
     struct _iterator {
         using iterator_category = std::random_access_iterator_tag;
-
-        using value_type = std::remove_cv_t<std::remove_pointer_t<_Pointer>>;
-        using size_type = size_type;
-        using difference_type = difference_type;
+        using difference_type = _Data::difference_type;
+        using size_type = _Data::size_type;
         using pointer = _Pointer;
         using reference = _Reference;
 
@@ -81,9 +79,6 @@ struct Pool {
         friend bool operator==(const _iterator &a, const _iterator &b) {
             return a._data->data() == b._data->data() && a._index == b._index;
         };
-        friend bool operator!=(const _iterator &a, const _iterator &b) {
-            return !(a == b);
-        };
 
         _Data *_data;
         size_type _index;
@@ -97,49 +92,49 @@ struct Pool {
     data_container_type data;
     size_type next_free_index = size_type(-1);
 
-    [[nodiscard]] constexpr auto at(size_type index) -> std::optional<value_type *> {
+    [[nodiscard]] constexpr auto at(size_type index) -> std::optional<pointer> {
         if (index >= data.size()) return {};
         auto data_iter = std::next(data.begin(), index);
         if (!data_iter->valid) return {};
         return &data_iter->value;
     }
-    [[nodiscard]] constexpr auto at(size_type index) const -> std::optional<const value_type *> {
+    [[nodiscard]] constexpr auto at(size_type index) const -> std::optional<const_pointer> {
         if (index >= data.size()) return {};
         auto data_iter = std::next(data.begin(), index);
         if (!data_iter->valid) return {};
         return &data_iter->value;
     }
 
-    [[nodiscard]] constexpr auto operator[](size_type index) -> value_type & {
+    [[nodiscard]] constexpr auto operator[](size_type index) -> reference {
         auto data_iter = std::next(data.begin(), index);
         return data_iter->value;
     }
-    [[nodiscard]] constexpr auto operator[](size_type index) const -> const value_type & {
+    [[nodiscard]] constexpr auto operator[](size_type index) const -> const_reference {
         auto data_iter = std::next(data.begin(), index);
         return data_iter->value;
     }
 
     template <class... Args>
-    constexpr auto emplace(Args &&...args) -> iterator {
+    constexpr auto emplace(Args &&...args) -> size_type {
         if (next_free_index == size_type(-1)) {
             auto x = data_element_type{.valid = true};
             x.value = {std::forward<Args>(args)...};
             data.emplace_back(x);
-            return iterator(&data, data.size() - 1);
+            return data.size() - 1;
         } else {
             auto index = next_free_index;
             next_free_index = data[next_free_index].next;
             auto data_iter = std::next(data.begin(), index);
             data_iter->value = {std::forward<Args>(args)...};
             data_iter->valid = true;
-            return iterator(&data, index);
+            return index;
         }
     }
 
-    constexpr auto insert(const value_type &value) -> iterator {
+    constexpr auto insert(const value_type &value) -> size_type {
         return this->emplace(value);
     }
-    constexpr auto insert(value_type &&value) -> iterator {
+    constexpr auto insert(value_type &&value) -> size_type {
         return this->emplace(std::move(value));
     }
 

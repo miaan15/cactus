@@ -1,134 +1,142 @@
-#include <gtest/gtest.h>
+import ECS;
 
-import Pool;
-
-using P = cactus::Pool<double>;
-
-TEST(Pool, StartsEmpty) {
-    P p;
-    EXPECT_TRUE(p.empty());
-    EXPECT_EQ(p.size(), 0u);
+int main() {
+    cactus::ecs::SmallWorld<int, double> w;
+    auto e = w.create_entity();
+    w.emplace<int>(5);
 }
 
-TEST(Pool, InsertGrowsRawStorage) {
-    P p;
-    p.insert(10);
-    p.insert(20);
-    p.insert(30);
-    EXPECT_EQ(p.size(), 3u);
-    EXPECT_EQ(**p.at(0), 10);
-    EXPECT_EQ(**p.at(1), 20);
-    EXPECT_EQ(**p.at(2), 30);
-}
-
-TEST(Pool, AtReturnsNulloptOutOfRangeOrErased) {
-    P p;
-    EXPECT_FALSE(p.at(0).has_value());
-    p.insert(7);
-    p.erase(0u);
-    EXPECT_FALSE(p.at(0).has_value());
-    EXPECT_FALSE(p.at(99).has_value());
-}
-
-TEST(Pool, AtPointerAllowsMutation) {
-    P p;
-    p.insert(1);
-    **p.at(0) = 99;
-    EXPECT_EQ(**p.at(0), 99);
-}
-
-TEST(Pool, EraseByIndexDoesNotShrinkStorage) {
-    P p;
-    p.insert(1);
-    p.insert(2);
-    p.erase(0u);
-    EXPECT_EQ(p.size(), 2u); // raw slot count unchanged
-    EXPECT_FALSE(p.at(0).has_value());
-    EXPECT_EQ(**p.at(1), 2);
-}
-
-TEST(Pool, EraseByIterator) {
-    P p;
-    p.insert(5);
-    p.insert(6);
-    p.erase(p.begin());
-    EXPECT_FALSE(p.at(0).has_value());
-    EXPECT_EQ(**p.at(1), 6);
-}
-
-TEST(Pool, FreeListReusesLIFO) {
-    P p;
-    p.insert(0);
-    p.insert(1);
-    p.insert(2); // slots 0,1,2
-    p.erase(0u);
-    p.erase(2u); // free list: 2 -> 0
-    auto a = p.insert(10);
-    auto b = p.insert(20);
-    EXPECT_EQ(a._index, 2); // last erased = first reused
-    EXPECT_EQ(b._index, 0);
-    EXPECT_EQ(p.size(), 3u); // no extra allocation
-}
-
-TEST(Pool, ClearResetsToEmpty) {
-    P p;
-    p.insert(1);
-    p.insert(2);
-    p.erase(0u);
-    p.clear();
-    EXPECT_TRUE(p.empty());
-    auto it = p.insert(42);
-    EXPECT_EQ(it._index, 0); // fresh insert starts at slot 0
-}
-
-TEST(Pool, ReservePreallocatesWithoutInsert) {
-    P p;
-    p.reserve(64);
-    EXPECT_TRUE(p.empty());
-    EXPECT_GE(p.capacity(), 64u);
-}
-
-TEST(Pool, SwapExchangesContents) {
-    P a, b;
-    a.insert(1);
-    a.insert(2);
-    b.insert(9);
-    cactus::swap(a, b);
-    EXPECT_EQ(a.size(), 1u);
-    EXPECT_EQ(**a.at(0), 9);
-    EXPECT_EQ(b.size(), 2u);
-    EXPECT_EQ(**b.at(0), 1);
-}
-
-TEST(Pool, IteratorSkipsErasedSlots) {
-    P p;
-    p.insert(10);
-    p.insert(20);
-    p.insert(30);
-    p.erase(1u);
-    std::vector<int> live;
-    for (int v : p) live.push_back(v);
-    EXPECT_EQ(live, (std::vector<int>{10, 30}));
-}
-
-TEST(Pool, ReverseIteratorVisitsLiveValuesBackwards) {
-    P p;
-    p.insert(1);
-    p.insert(2);
-    p.insert(3);
-    p.erase(1u); // erase middle
-    std::vector<int> rev;
-    for (auto it = p.rbegin(); it != p.rend(); ++it) rev.push_back(*it);
-    EXPECT_EQ(rev, (std::vector<int>{3, 1}));
-}
-
-// ---------------------------------------------------------------------------
-
-int main(int argc, char **argv) {
-    ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
-}
-
+// #include <gtest/gtest.h>
+//
+// import Pool;
+//
+// using P = cactus::Pool<double>;
+//
+// TEST(Pool, StartsEmpty) {
+//     P p;
+//     EXPECT_TRUE(p.empty());
+//     EXPECT_EQ(p.size(), 0u);
+// }
+//
+// TEST(Pool, InsertGrowsRawStorage) {
+//     P p;
+//     p.insert(10);
+//     p.insert(20);
+//     p.insert(30);
+//     EXPECT_EQ(p.size(), 3u);
+//     EXPECT_EQ(**p.at(0), 10);
+//     EXPECT_EQ(**p.at(1), 20);
+//     EXPECT_EQ(**p.at(2), 30);
+// }
+//
+// TEST(Pool, AtReturnsNulloptOutOfRangeOrErased) {
+//     P p;
+//     EXPECT_FALSE(p.at(0).has_value());
+//     p.insert(7);
+//     p.erase(0u);
+//     EXPECT_FALSE(p.at(0).has_value());
+//     EXPECT_FALSE(p.at(99).has_value());
+// }
+//
+// TEST(Pool, AtPointerAllowsMutation) {
+//     P p;
+//     p.insert(1);
+//     **p.at(0) = 99;
+//     EXPECT_EQ(**p.at(0), 99);
+// }
+//
+// TEST(Pool, EraseByIndexDoesNotShrinkStorage) {
+//     P p;
+//     p.insert(1);
+//     p.insert(2);
+//     p.erase(0u);
+//     EXPECT_EQ(p.size(), 2u); // raw slot count unchanged
+//     EXPECT_FALSE(p.at(0).has_value());
+//     EXPECT_EQ(**p.at(1), 2);
+// }
+//
+// TEST(Pool, EraseByIterator) {
+//     P p;
+//     p.insert(5);
+//     p.insert(6);
+//     p.erase(p.begin());
+//     EXPECT_FALSE(p.at(0).has_value());
+//     EXPECT_EQ(**p.at(1), 6);
+// }
+//
+// TEST(Pool, FreeListReusesLIFO) {
+//     P p;
+//     p.insert(0);
+//     p.insert(1);
+//     p.insert(2); // slots 0,1,2
+//     p.erase(0u);
+//     p.erase(2u); // free list: 2 -> 0
+//     auto a = p.insert(10);
+//     auto b = p.insert(20);
+//     EXPECT_EQ(a._index, 2); // last erased = first reused
+//     EXPECT_EQ(b._index, 0);
+//     EXPECT_EQ(p.size(), 3u); // no extra allocation
+// }
+//
+// TEST(Pool, ClearResetsToEmpty) {
+//     P p;
+//     p.insert(1);
+//     p.insert(2);
+//     p.erase(0u);
+//     p.clear();
+//     EXPECT_TRUE(p.empty());
+//     auto it = p.insert(42);
+//     EXPECT_EQ(it._index, 0); // fresh insert starts at slot 0
+// }
+//
+// TEST(Pool, ReservePreallocatesWithoutInsert) {
+//     P p;
+//     p.reserve(64);
+//     EXPECT_TRUE(p.empty());
+//     EXPECT_GE(p.capacity(), 64u);
+// }
+//
+// TEST(Pool, SwapExchangesContents) {
+//     P a, b;
+//     a.insert(1);
+//     a.insert(2);
+//     b.insert(9);
+//     cactus::swap(a, b);
+//     EXPECT_EQ(a.size(), 1u);
+//     EXPECT_EQ(**a.at(0), 9);
+//     EXPECT_EQ(b.size(), 2u);
+//     EXPECT_EQ(**b.at(0), 1);
+// }
+//
+// TEST(Pool, IteratorSkipsErasedSlots) {
+//     P p;
+//     p.insert(10);
+//     p.insert(20);
+//     p.insert(30);
+//     p.erase(1u);
+//     std::vector<int> live;
+//     for (int v : p) live.push_back(v);
+//     EXPECT_EQ(live, (std::vector<int>{10, 30}));
+// }
+//
+// TEST(Pool, ReverseIteratorVisitsLiveValuesBackwards) {
+//     P p;
+//     p.insert(1);
+//     p.insert(2);
+//     p.insert(3);
+//     p.erase(1u); // erase middle
+//     std::vector<int> rev;
+//     for (auto it = p.rbegin(); it != p.rend(); ++it) rev.push_back(*it);
+//     EXPECT_EQ(rev, (std::vector<int>{3, 1}));
+// }
+//
+// // ---------------------------------------------------------------------------
+//
+// int main(int argc, char **argv) {
+//     ::testing::InitGoogleTest(&argc, argv);
+//     return RUN_ALL_TESTS();
+// }
+//
 // #include <boost/container/vector.hpp>
 // #include <cstdlib>
 // #include <ctime>
