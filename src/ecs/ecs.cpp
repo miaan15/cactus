@@ -9,7 +9,7 @@ module;
 export module ECS;
 
 import SlotMap;
-import Pool;
+import FreelistVector;
 
 namespace cactus::ecs {
 
@@ -44,7 +44,7 @@ struct SmallWorld {
         size_t prefab_size;
     };
 
-    Pool<EntitySpec> entity_specs;
+    FreelistVector<EntitySpec> entity_specs;
     std::flat_map<Signature, ArchetypeTable> archetypes;
 
     template <typename T>

@@ -253,6 +253,8 @@ TEST(SlotMapTest, ConstFindAndAt) {
     EXPECT_EQ(*opt.value(), 77);
 }
 
+// ---------------------------------------------------------------------------
+
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();

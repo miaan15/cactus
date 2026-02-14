@@ -3,14 +3,14 @@ module;
 #include <boost/container/vector.hpp>
 #include <optional>
 
-export module Pool;
+export module FreelistVector;
 
 namespace cactus {
 
 export template <typename T, template <typename...> typename Container = boost::container::vector>
     requires std::is_same<typename Container<T>::value_type, T>::value
              && std::is_trivially_copyable_v<T>
-struct Pool {
+struct FreelistVector {
     using value_type = T;
     using container_type = Container<T>;
     using size_type = typename container_type::size_type;
@@ -40,7 +40,7 @@ struct Pool {
 
     template <typename _Pointer, typename _Reference, typename _Data>
     struct _iterator {
-        using iterator_category = std::random_access_iterator_tag;
+        using iterator_category = std::bidirectional_iterator_tag;
         using difference_type = _Data::difference_type;
         using size_type = _Data::size_type;
         using pointer = _Pointer;
@@ -168,26 +168,32 @@ struct Pool {
         next_free_index = size_type(-1);
     }
 
-    constexpr auto swap(Pool &rhs) -> void {
+    constexpr auto swap(FreelistVector &rhs) -> void {
         using std::swap;
         swap(data, rhs.data);
         swap(next_free_index, rhs.next_free_index);
     }
 
     constexpr iterator begin() {
-        return iterator(&data, 0);
+        size_type i = 0;
+        while (i < data.size() && !data[i].valid) ++i;
+        return iterator(&data, i);
     }
     constexpr iterator end() {
         return iterator(&data, data.size());
     }
     constexpr const_iterator begin() const {
-        return const_iterator(&data, 0);
+        size_type i = 0;
+        while (i < data.size() && !data[i].valid) ++i;
+        return const_iterator(&data, i);
     }
     constexpr const_iterator end() const {
         return const_iterator(&data, data.size());
     }
     constexpr const_iterator cbegin() const {
-        return const_iterator(&data, 0);
+        size_type i = 0;
+        while (i < data.size() && !data[i].valid) ++i;
+        return const_iterator(&data, i);
     }
     constexpr const_iterator cend() const {
         return const_iterator(&data, data.size());
@@ -211,19 +217,13 @@ struct Pool {
         return const_reverse_iterator(cbegin());
     }
 
-    constexpr auto empty() const -> bool {
-        return data.size() == 0;
-    }
-    constexpr auto size() const -> size_type {
-        return data.size();
-    }
     constexpr auto capacity() const -> size_type {
         return data.capacity();
     }
 };
 
 export template <class T, template <class...> class Container>
-constexpr void swap(Pool<T, Container> &lhs, Pool<T, Container> &rhs) {
+constexpr void swap(FreelistVector<T, Container> &lhs, FreelistVector<T, Container> &rhs) {
     lhs.swap(rhs);
 }
 
