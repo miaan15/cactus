@@ -26,7 +26,7 @@ struct is_unique<T, Us...> {
     static constexpr bool value = (!std::is_same_v<T, Us> && ...) && is_unique<Us...>::value;
 };
 
-template <typename... Ts>
+export template <typename... Ts>
 constexpr bool is_unique_v = is_unique<Ts...>::value;
 
 export template <typename... Ts>
@@ -94,7 +94,7 @@ struct SmallWorld {
     template <size_t Id>
     constexpr auto component_offset(Signature signature) -> size_t {
         auto cal = [&]<std::size_t... Is>(std::index_sequence<Is...>) -> size_t {
-            return (((signature >> Is) & 1 ? component_size<Is>() : 0) + ...);
+            return (size_t(0) + ... + ((signature >> Is) & 1 ? component_size<Is>() : 0));
         };
         return cal(std::make_index_sequence<Id>{});
     }
