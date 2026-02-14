@@ -22,8 +22,6 @@ add_subdirectory(${VENDOR_DIR}/raylib)
 add_subdirectory(${VENDOR_DIR}/glm)
 add_subdirectory(${VENDOR_DIR}/gtest)
 
-add_executable(app ${SRC_DIR}/main.cpp)
-
 file(GLOB_RECURSE SRCS CONFIGURE_DEPENDS "${SRC_DIR}/*.cpp")
 list(REMOVE_ITEM SRCS
     ${SRC_DIR}/main.cpp
@@ -31,18 +29,7 @@ list(REMOVE_ITEM SRCS
 
 file(GLOB_RECURSE TEST_SRCS CONFIGURE_DEPENDS "${TEST_DIR}/main.cpp")
 
-target_sources(app
-    PUBLIC
-    FILE_SET CXX_MODULES FILES
-        ${SRCS}
-)
-target_sources(app
-    PUBLIC
-    FILE_SET CXX_MODULES FILES
-        ${VENDOR_DIR}/glm/glm/glm.cppm
-)
-
-target_include_directories(app PRIVATE
+set(INC_DIRS
     ${VENDOR_DIR}/raylib/src
 
     ${VENDOR_DIR}/boost/libs/core/include
@@ -58,8 +45,29 @@ target_include_directories(app PRIVATE
     ${VENDOR_DIR}/gtest/googletest/include
 )
 
-target_link_libraries(app PRIVATE 
+set(LINKS
     raylib
     Boost::container
     gtest
 )
+
+macro(create_target target exe_source)
+    add_executable(${target} ${exe_source})
+    target_sources(${target}
+        PRIVATE
+        FILE_SET CXX_MODULES FILES
+            ${SRCS}
+            ${VENDOR_DIR}/glm/glm/glm.cppm
+    )
+    target_include_directories(${target} PRIVATE ${INC_DIRS})
+    target_link_libraries(${target} PRIVATE ${LINKS})
+endmacro()
+
+create_target(main ${SRC_DIR}/main.cpp)
+
+foreach(source IN LISTS TEST_SRCS) 
+    get_filename_component(parent_dir "${source}" DIRECTORY)
+    get_filename_component(folder "${parent_dir}" NAME)
+    set(target "${folder}_test")
+    create_target(${target} ${source})
+endforeach()
