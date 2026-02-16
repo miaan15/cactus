@@ -1,7 +1,43 @@
 #include <print>
 
+import ECS;
+
+using namespace cactus::ecs;
+
+struct Position {
+    float x{}, y{}, z{};
+};
+struct Velocity {
+    float vx{}, vy{}, vz{};
+};
+struct Health {
+    int hp{100};
+};
+struct Tag {
+    bool active{false};
+};
+struct BigData {
+    std::array<double, 16> mat{};
+};
+struct ByteComp {
+    uint8_t val{};
+};
+struct ShortComp {
+    uint16_t val{};
+};
+struct Int64Comp {
+    int64_t val{};
+};
+struct FloatComp {
+    float val{};
+};
+
 int main() {
-    std::println("Hello World");
+    SmallWorld<Position, Velocity, Health> w;
+    auto e = w.create_entity();
+    w.emplace<Position>(e, 1.f, 2.f, 3.f);
+    w.emplace<Health>(e, 55);
+    w.erase<Position>(e);
 }
 
 // #include <boost/container/vector.hpp>
@@ -63,7 +99,8 @@ int main() {
 //         float halfsize = random_float(MIN_BOX_SIZE, MAX_BOX_SIZE) * 0.5f;
 //         vec2 center{random_float(halfsize, SCREEN_WIDTH - halfsize),
 //                     random_float(halfsize, SCREEN_HEIGHT - halfsize)};
-//         vec2 vel{random_float(-MAX_BOX_VEL, MAX_BOX_VEL), random_float(-MAX_BOX_VEL, MAX_BOX_VEL)};
+//         vec2 vel{random_float(-MAX_BOX_VEL, MAX_BOX_VEL), random_float(-MAX_BOX_VEL,
+//         MAX_BOX_VEL)};
 //
 //         if (length(vel) < MIN_BOX_VEL) {
 //             vel = normalize(vel) * MIN_BOX_VEL;
@@ -71,7 +108,8 @@ int main() {
 //
 //         float invmass = 1.0f / (halfsize * halfsize * 4.0f);
 //
-//         ColliderKey key = world.create(center, vec2(halfsize, halfsize), invmass, BOX_RESTITUTION,
+//         ColliderKey key = world.create(center, vec2(halfsize, halfsize), invmass,
+//         BOX_RESTITUTION,
 //                                        BOX_FRICTION, BOX_FRICTION);
 //         auto entry = world.get(key);
 //         entry->vel = vel;
@@ -148,7 +186,8 @@ int main() {
 //         }
 //         if (pause) {
 //             rl::DrawText(rl::TextFormat("%d", left), 30, SCREEN_HEIGHT / 2 - 50, 100, rl::BLACK);
-//             rl::DrawText(rl::TextFormat("%d", right), SCREEN_WIDTH / 2 + 30, SCREEN_HEIGHT / 2 - 50,
+//             rl::DrawText(rl::TextFormat("%d", right), SCREEN_WIDTH / 2 + 30, SCREEN_HEIGHT / 2 -
+//             50,
 //                          100, rl::BLACK);
 //         }
 //
