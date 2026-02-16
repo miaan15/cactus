@@ -13,6 +13,12 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Build type" FORCE)
 endif()
 
+option(USE_ASAN "Enable AddressSanitizer" OFF)
+if(USE_ASAN)
+    add_compile_options(-fsanitize=address -fno-omit-frame-pointer -g)
+    add_link_options(-fsanitize=address)
+endif()
+
 set(VENDOR_DIR ${CMAKE_SOURCE_DIR}/vendor)
 set(SRC_DIR "${CMAKE_SOURCE_DIR}/src")
 set(TEST_DIR "${CMAKE_SOURCE_DIR}/test")

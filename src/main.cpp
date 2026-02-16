@@ -1,44 +1,4 @@
-#include <print>
-
-import ECS;
-
-using namespace cactus::ecs;
-
-struct Position {
-    float x{}, y{}, z{};
-};
-struct Velocity {
-    float vx{}, vy{}, vz{};
-};
-struct Health {
-    int hp{100};
-};
-struct Tag {
-    bool active{false};
-};
-struct BigData {
-    std::array<double, 16> mat{};
-};
-struct ByteComp {
-    uint8_t val{};
-};
-struct ShortComp {
-    uint16_t val{};
-};
-struct Int64Comp {
-    int64_t val{};
-};
-struct FloatComp {
-    float val{};
-};
-
-int main() {
-    SmallWorld<Position, Velocity, Health> w;
-    auto e = w.create_entity();
-    w.emplace<Position>(e, 1.f, 2.f, 3.f);
-    w.emplace<Health>(e, 55);
-    w.erase<Position>(e);
-}
+int main() {}
 
 // #include <boost/container/vector.hpp>
 // #include <cstdlib>

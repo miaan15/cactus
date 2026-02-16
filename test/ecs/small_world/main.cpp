@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <gtest/gtest.h>
 
-import ECS;
+import Ecs;
 
 using namespace cactus::ecs;
 
