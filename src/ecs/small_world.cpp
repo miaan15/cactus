@@ -2,44 +2,28 @@ module;
 
 #include <boost/container/vector.hpp>
 #include <cstddef>
-#include <cstdint>
 #include <flat_map>
 #include <type_traits>
 
 export module Ecs:SmallWorld;
+
+import :Common;
 
 import SlotMap;
 import FreelistVector;
 
 namespace cactus::ecs {
 
-export using Entity = uint64_t;
-
-template <typename... Ts>
-struct is_unique;
-
-template <typename T>
-struct is_unique<T> : std::true_type {};
-
-template <typename T, typename... Us>
-struct is_unique<T, Us...> {
-    static constexpr bool value = (!std::is_same_v<T, Us> && ...) && is_unique<Us...>::value;
-};
-
-export template <typename... Ts>
-constexpr bool is_unique_v = is_unique<Ts...>::value;
-
 export template <typename... Ts>
     requires is_unique_v<Ts...> && (sizeof...(Ts) <= 64)
 struct SmallWorld {
-    using Signature = uint64_t;
     struct EntitySpec {
         Signature signature;
         size_t row;
     };
     struct ArchetypeTable {
         std::byte *ptr;
-        size_t *entities;
+        Entity *entities;
         size_t size;
         size_t capacity;
         size_t prefab_size;
@@ -117,12 +101,19 @@ struct SmallWorld {
         return (T *)((archetype->ptr + row * archetype->prefab_size) + column);
     }
 
+    template <typename T>
+        requires(is_components_contain<T>())
+    inline auto contains(Entity entity) -> bool {
+        return (entity_specs[entity].signature >> component_id<T>()) & 1;
+    }
+
     template <typename T, typename... Args>
         requires(is_components_contain<T>())
     auto emplace(Entity entity, Args... args) {
         constexpr auto component = component_id<T>();
         const auto signature = entity_specs[entity].signature;
 
+        // When try to emplace on existed component, it will instead overwrite that
         if (((signature >> component_id<T>()) & 1) != 0) [[unlikely]] {
             assert(archetypes.contains(signature));
             auto archetype = &archetypes.at(signature);
@@ -133,6 +124,7 @@ struct SmallWorld {
         } else [[likely]] {
             const auto new_signature = signature | (1 << component);
 
+            // If the entity has no component then there's no data in any archetype represent it
             if (signature == 0) {
                 create_archetype_if_needed(new_signature);
                 auto archetype = &archetypes.at(new_signature);
@@ -199,10 +191,13 @@ struct SmallWorld {
         constexpr auto component = component_id<T>();
         const auto signature = entity_specs[entity].signature;
 
+        // Only erase existed component
         if (((signature >> component) & 1) == 0) return;
 
         const auto new_signature = signature & ~(1 << component);
 
+        // If after erase the component, the entity would have no component, then just erase the
+        // component completely
         if (new_signature == 0) {
             assert(archetypes.contains(signature));
             auto archetype = &archetypes.at(signature);
