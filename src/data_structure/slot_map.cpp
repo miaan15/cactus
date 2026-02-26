@@ -93,7 +93,7 @@ struct SlotMap {
     }
 
     template <class... Args>
-    constexpr auto emplace(Args &&...args) {
+    constexpr auto emplace(Args &&...args) -> key_type {
         auto data_pos = data.size();
         data.emplace_back(std::forward<Args>(args)...);
         data_map.emplace_back(next_slot_idx);
