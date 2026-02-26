@@ -10,7 +10,6 @@ export module Ecs:Common;
 namespace cactus::ecs {
 
 export using Entity = size_t;
-export using Signature = uint64_t;
 
 export template <typename... Ts>
 struct is_unique;
@@ -29,6 +28,8 @@ constexpr bool is_unique_v = is_unique<Ts...>::value;
 export template <typename... Ts>
 struct Prefab {
     std::byte *root;
+
+    using tuple_t = std::tuple<Ts...>;
 
     template <size_t I, typename... Us>
         requires(I < sizeof...(Us))
@@ -67,7 +68,7 @@ struct Prefab {
         return (offset + alignment - 1) & ~(alignment - 1);
     }
 
-    static constexpr auto total_size() -> size_t {
+    static constexpr auto size() -> size_t {
         auto cal = [&]<size_t... Is>(std::index_sequence<Is...>) -> size_t {
             size_t offset = 0;
             ((offset = align_up(offset, alignof(component_at_t<Is>)) + sizeof(component_at_t<Is>)),
@@ -75,6 +76,17 @@ struct Prefab {
             return offset;
         };
         return cal(std::make_index_sequence<sizeof...(Ts)>{});
+    }
+
+    template <size_t I>
+    static constexpr auto size_before() -> size_t {
+        auto cal = [&]<size_t... Is>(std::index_sequence<Is...>) -> size_t {
+            size_t offset = 0;
+            ((offset = align_up(offset, alignof(component_at_t<Is>)) + sizeof(component_at_t<Is>)),
+             ...);
+            return offset;
+        };
+        return cal(std::make_index_sequence<I>{});
     }
 
     template <size_t I>
@@ -87,6 +99,12 @@ struct Prefab {
             return offset;
         };
         return cal(std::make_index_sequence<I>{});
+    }
+
+    template <typename T>
+        requires(is_contains_component<T>())
+    static constexpr auto component_offset() -> size_t {
+        return component_offset<component_index<T>>();
     }
 
     template <typename T>

@@ -3,6 +3,7 @@ module;
 #include <boost/container/vector.hpp>
 #include <cstddef>
 #include <flat_map>
+#include <tuple>
 #include <type_traits>
 
 export module Ecs:SmallWorld;
@@ -13,6 +14,36 @@ import SlotMap;
 import FreelistVector;
 
 namespace cactus::ecs {
+
+export using Signature = uint64_t;
+
+constexpr auto signature_check(Signature signature, size_t i) -> bool {
+    return (signature >> i) & 1;
+}
+
+template <Signature Signature, size_t I, typename Res, typename... Ts>
+struct get_prefab_helper;
+template <Signature Signature, size_t I, typename... Us>
+struct get_prefab_helper<Signature, I, Prefab<Us...>> {
+    using type = Prefab<Us...>;
+};
+template <Signature Signature, size_t I, typename... Us, typename T, typename... Ts>
+    requires(signature_check(Signature, I))
+struct get_prefab_helper<Signature, I, Prefab<Us...>, T, Ts...> {
+    using type = typename get_prefab_helper<Signature, I, Prefab<Us..., T>, Ts...>::type;
+};
+template <Signature Signature, size_t I, typename... Us, typename T, typename... Ts>
+    requires(!signature_check(Signature, I))
+struct get_prefab_helper<Signature, I, Prefab<Us...>, T, Ts...> {
+    using type = typename get_prefab_helper<Signature, I, Prefab<Us...>, Ts...>::type;
+};
+
+template <Signature Signature, typename... Ts>
+struct get_prefab {
+    using type = get_prefab_helper<Signature, 0, Prefab<>, Ts...>;
+};
+template <Signature Signature, typename... Ts>
+using get_prefab_t = typename get_prefab<Signature, Ts...>::type;
 
 export template <typename... Ts>
     requires is_unique_v<Ts...> && (sizeof...(Ts) <= 64)
@@ -48,35 +79,17 @@ struct SmallWorld {
     }
 
     template <typename T>
-    static consteval auto is_components_contain() -> bool {
+    static consteval auto is_contains_component() -> bool {
         bool res = false;
         res = (std::is_same_v<T, Ts> | ...);
         return res;
     }
 
-    template <size_t I, typename... Us>
-        requires(I < sizeof...(Us))
-    struct type_at;
-    template <typename U, typename... Us>
-    struct type_at<0, U, Us...> {
-        using type = U;
-    };
-    template <size_t I, typename U, typename... Us>
-        requires(I < sizeof...(Us) + 1)
-    struct type_at<I, U, Us...> {
-        using type = std::conditional_t<I == 0, U, typename type_at<I - 1, Us...>::type>;
-    };
-
-    template <size_t Id>
-    struct component_at_id {
-        using type = type_at<Id, Ts...>::type;
-    };
-    template <size_t Id>
-    using component_at_id_t = component_at_id<Id>::type;
-
-    template <size_t Id>
-    static consteval auto component_size() -> size_t {
-        return sizeof(component_at_id_t<Id>);
+    template <typename... Us>
+    static consteval auto is_contains_components() -> bool {
+        bool res = false;
+        res = (is_contains_component<Us> | ...);
+        return res;
     }
 
     [[nodiscard]] auto create_entity() -> Entity {
@@ -84,40 +97,55 @@ struct SmallWorld {
         return entity;
     }
 
+    template <typename F, typename... Us>
+        requires(is_contains_components<Us...>())
+    auto each(F &&func) -> void {
+        constexpr auto signature = get_signature<Us...>();
+        auto &table = archetypes.at(signature);
+        using prefab_t = Prefab<Us...>;
+        for (size_t row = 0; row < table.size; row++) {
+            auto *row_ptr = &table + row * table.prefab_size;
+
+            std::apply(std::forward<F>(func),
+                       std::tuple<Us *...>{
+                           (Us *)(row_ptr + prefab_t::template component_offset<Us>())...});
+        }
+    }
+
     template <typename T>
-        requires(is_components_contain<T>())
+        requires(is_contains_component<T>())
     auto get(Entity entity) -> std::optional<T *> {
         constexpr auto component = component_id<T>();
         const auto signature = entity_specs[entity].signature;
 
-        if (((signature >> component) & 1) == 0) return {};
+        if (!signature_check(signature, component)) return {};
 
         assert(archetypes.contains(signature));
         auto archetype = &archetypes.at(signature);
 
-        const auto column = column_offset<component>(signature);
+        const auto column = prefab_component_offset<component>(signature);
         const auto row = entity_specs[entity].row;
 
         return (T *)((archetype->ptr + row * archetype->prefab_size) + column);
     }
 
     template <typename T>
-        requires(is_components_contain<T>())
+        requires(is_contains_component<T>())
     inline auto contains(Entity entity) -> bool {
         return (entity_specs[entity].signature >> component_id<T>()) & 1;
     }
 
     template <typename T, typename... Args>
-        requires(is_components_contain<T>())
+        requires(is_contains_component<T>())
     auto emplace(Entity entity, Args... args) {
         constexpr auto component = component_id<T>();
         const auto signature = entity_specs[entity].signature;
 
         // When try to emplace on existed component, it will instead overwrite that
-        if (((signature >> component_id<T>()) & 1) != 0) [[unlikely]] {
+        if (signature_check(signature, component_id<T>())) [[unlikely]] {
             assert(archetypes.contains(signature));
             auto archetype = &archetypes.at(signature);
-            const auto column = column_offset<component>(signature);
+            const auto column = prefab_component_offset<component>(signature);
 
             *(T *)((archetype->ptr + entity_specs[entity].row * archetype->prefab_size)
                    + column) = {std::forward<Args>(args)...};
@@ -161,7 +189,7 @@ struct SmallWorld {
 
             const auto old_size_before_component = prefab_size_before<component>(signature);
 
-            const auto column = column_offset<component>(new_signature);
+            const auto column = prefab_component_offset<component>(new_signature);
 
             memcpy(new_row_ptr, old_row_ptr, old_size_before_component);
             std::construct_at((T *)(new_row_ptr + column), std::forward<Args>(args)...);
@@ -186,13 +214,13 @@ struct SmallWorld {
     }
 
     template <typename T>
-        requires(is_components_contain<T>())
+        requires(is_contains_component<T>())
     auto erase(Entity entity) -> void {
         constexpr auto component = component_id<T>();
         const auto signature = entity_specs[entity].signature;
 
         // Only erase existed component
-        if (((signature >> component) & 1) == 0) return;
+        if (!signature_check(signature, component)) return;
 
         const auto new_signature = signature & ~(1 << component);
 
@@ -234,7 +262,7 @@ struct SmallWorld {
         auto old_row_ptr = old_archetype->ptr + old_row * old_archetype->prefab_size;
         auto new_row_ptr = new_archetype->ptr + new_row * new_archetype->prefab_size;
 
-        const auto column = column_offset<component>(signature);
+        const auto column = prefab_component_offset<component>(signature);
         const auto old_size_before_component = prefab_size_before<component>(signature);
 
         memcpy(new_row_ptr, old_row_ptr, old_size_before_component);
@@ -257,6 +285,39 @@ struct SmallWorld {
         --old_archetype->size;
     }
 
+    template <size_t I, typename... Us>
+        requires(I < sizeof...(Us))
+    struct type_at;
+    template <typename U, typename... Us>
+    struct type_at<0, U, Us...> {
+        using type = U;
+    };
+    template <size_t I, typename U, typename... Us>
+        requires(I < sizeof...(Us) + 1)
+    struct type_at<I, U, Us...> {
+        using type = std::conditional_t<I == 0, U, typename type_at<I - 1, Us...>::type>;
+    };
+
+    template <size_t Id>
+    struct component_at_id {
+        using type = type_at<Id, Ts...>::type;
+    };
+    template <size_t Id>
+    using component_at_id_t = component_at_id<Id>::type;
+
+    template <size_t Id>
+    static consteval auto component_size() -> size_t {
+        return sizeof(component_at_id_t<Id>);
+    }
+
+    template <typename... Us>
+        requires(is_contains_components<Us...>())
+    static consteval auto get_signature() -> Signature {
+        Signature res;
+        res = ((1 << (component_id<Us>)) | ...);
+        return res;
+    }
+
     constexpr size_t align_up(size_t offset, size_t alignment) {
         return (offset + alignment - 1) & ~(alignment - 1);
     }
@@ -264,9 +325,10 @@ struct SmallWorld {
     constexpr auto prefab_size(Signature signature) -> size_t {
         auto cal = [&]<size_t... Is>(std::index_sequence<Is...>) -> size_t {
             size_t offset = 0;
-            ((offset = (signature >> Is) & 1 ? align_up(offset, alignof(component_at_id_t<Is>))
-                                                   + sizeof(component_at_id_t<Is>)
-                                             : offset),
+            ((offset = signature_check(signature, Is)
+                           ? align_up(offset, alignof(component_at_id_t<Is>))
+                                 + sizeof(component_at_id_t<Is>)
+                           : offset),
              ...);
             return offset;
         };
@@ -274,12 +336,13 @@ struct SmallWorld {
     }
 
     template <size_t I>
-    constexpr auto column_offset(Signature signature) -> size_t {
+    constexpr auto prefab_component_offset(Signature signature) -> size_t {
         auto cal = [&]<size_t... Is>(std::index_sequence<Is...>) -> size_t {
             size_t offset = 0;
-            ((offset = (signature >> Is) & 1 ? align_up(offset, alignof(component_at_id_t<Is>))
-                                                   + sizeof(component_at_id_t<Is>)
-                                             : offset),
+            ((offset = signature_check(signature, Is)
+                           ? align_up(offset, alignof(component_at_id_t<Is>))
+                                 + sizeof(component_at_id_t<Is>)
+                           : offset),
              ...);
             offset = align_up(offset, alignof(component_at_id_t<I>));
             return offset;
@@ -291,9 +354,10 @@ struct SmallWorld {
     constexpr auto prefab_size_before(Signature signature) -> size_t {
         auto cal = [&]<size_t... Is>(std::index_sequence<Is...>) -> size_t {
             size_t offset = 0;
-            ((offset = (signature >> Is) & 1 ? align_up(offset, alignof(component_at_id_t<Is>))
-                                                   + sizeof(component_at_id_t<Is>)
-                                             : offset),
+            ((offset = signature_check(signature, Is)
+                           ? align_up(offset, alignof(component_at_id_t<Is>))
+                                 + sizeof(component_at_id_t<Is>)
+                           : offset),
              ...);
             return offset;
         };

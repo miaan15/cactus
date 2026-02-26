@@ -1,285 +1,267 @@
 #include <gtest/gtest.h>
+#include <string>
 #include <vector>
 
 import FreelistVector;
 
-using cactus::FreelistVector;
+using namespace cactus;
 
 // ---------------------------------------------------------------------------
-// Construction & empty state
+// Insert / Emplace
 // ---------------------------------------------------------------------------
 
-TEST(FreelistVectorTest, DefaultConstructedIsEmpty) {
-    FreelistVector<int> fv{};
-    EXPECT_EQ(fv.begin(), fv.end());
+TEST(FreelistVector, Insert_SingleElement_ReturnsIndexZero) {
+    FreelistVector<int> flv;
+    auto index = flv.insert(42);
+    EXPECT_EQ(index, 0u);
+}
+
+TEST(FreelistVector, Insert_MultipleElements_ReturnsConsecutiveIndices) {
+    FreelistVector<int> flv;
+    EXPECT_EQ(flv.insert(1), 0u);
+    EXPECT_EQ(flv.insert(2), 1u);
+    EXPECT_EQ(flv.insert(3), 2u);
+}
+
+TEST(FreelistVector, Emplace_WithConstructorArgs_StoresCorrectValue) {
+    FreelistVector<std::string> flv;
+    auto index = flv.emplace(3u, 'x');
+    EXPECT_EQ(flv[index], "xxx");
 }
 
 // ---------------------------------------------------------------------------
-// Insert / at / operator[]
+// Erase
 // ---------------------------------------------------------------------------
 
-TEST(FreelistVectorTest, InsertSingleElement) {
-    FreelistVector<int> fv{};
-    auto idx = fv.insert(42);
-
-    auto opt = fv.at(idx);
-    ASSERT_TRUE(opt.has_value());
-    EXPECT_EQ(**opt, 42);
+TEST(FreelistVector, Erase_ValidIndex_MarksSlotInvalid) {
+    FreelistVector<int> flv;
+    auto index = flv.insert(10);
+    flv.erase(index);
+    EXPECT_FALSE(flv.contains(index));
 }
 
-TEST(FreelistVectorTest, InsertMultipleElements) {
-    FreelistVector<int> fv{};
-    auto i0 = fv.insert(10);
-    auto i1 = fv.insert(20);
-    auto i2 = fv.insert(30);
-
-    EXPECT_EQ(**fv.at(i0), 10);
-    EXPECT_EQ(**fv.at(i1), 20);
-    EXPECT_EQ(**fv.at(i2), 30);
+TEST(FreelistVector, Erase_OutOfBoundsIndex_DoesNothing) {
+    FreelistVector<int> flv;
+    flv.insert(1);
+    EXPECT_NO_FATAL_FAILURE(flv.erase(99u));
 }
 
-TEST(FreelistVectorTest, OperatorSubscriptReturnsReference) {
-    FreelistVector<int> fv{};
-    auto idx = fv.insert(99);
-
-    EXPECT_EQ(fv[idx], 99);
-
-    fv[idx] = 100;
-    EXPECT_EQ(fv[idx], 100);
-}
-
-// ---------------------------------------------------------------------------
-// At — invalid access
-// ---------------------------------------------------------------------------
-
-TEST(FreelistVectorTest, AtReturnsNulloptForOutOfRangeIndex) {
-    FreelistVector<int> fv{};
-    fv.insert(1);
-    EXPECT_FALSE(fv.at(999).has_value());
-}
-
-TEST(FreelistVectorTest, AtReturnsNulloptForErasedSlot) {
-    FreelistVector<int> fv{};
-    auto idx = fv.insert(42);
-    fv.erase(idx);
-    EXPECT_FALSE(fv.at(idx).has_value());
-}
-
-// ---------------------------------------------------------------------------
-// Erase by index
-// ---------------------------------------------------------------------------
-
-TEST(FreelistVectorTest, EraseByIndexInvalidatesSlot) {
-    FreelistVector<int> fv{};
-    auto i0 = fv.insert(10);
-    auto i1 = fv.insert(20);
-    auto i2 = fv.insert(30);
-
-    fv.erase(i1);
-
-    EXPECT_TRUE(fv.at(i0).has_value());
-    EXPECT_FALSE(fv.at(i1).has_value());
-    EXPECT_TRUE(fv.at(i2).has_value());
-}
-
-TEST(FreelistVectorTest, EraseAlreadyErasedIsNoop) {
-    FreelistVector<int> fv{};
-    auto idx = fv.insert(5);
-    fv.erase(idx);
-    fv.erase(idx); // should not crash
-    EXPECT_FALSE(fv.at(idx).has_value());
+TEST(FreelistVector, Erase_AlreadyErasedIndex_DoesNothing) {
+    FreelistVector<int> flv;
+    auto index = flv.insert(5);
+    flv.erase(index);
+    EXPECT_NO_FATAL_FAILURE(flv.erase(index));
 }
 
 // ---------------------------------------------------------------------------
 // Freelist reuse
 // ---------------------------------------------------------------------------
 
-TEST(FreelistVectorTest, ErasedSlotIsReused) {
-    FreelistVector<int> fv{};
-    auto i0 = fv.insert(10);
-    auto i1 = fv.insert(20);
-    fv.insert(30);
+TEST(FreelistVector, Insert_AfterErase_ReusesFreeSlot) {
+    FreelistVector<int> flv;
+    flv.insert(1);
+    auto freed = flv.insert(2);
+    flv.insert(3);
 
-    fv.erase(i0);
-    fv.erase(i1);
+    flv.erase(freed);
+    auto reused = flv.insert(99);
 
-    // Next two inserts should reclaim the freed slots
-    auto r0 = fv.insert(100);
-    auto r1 = fv.insert(200);
-
-    // Reused indices come from the freelist (LIFO), so r0 == i1, r1 == i0
-    EXPECT_EQ(r0, i1);
-    EXPECT_EQ(r1, i0);
-
-    EXPECT_EQ(**fv.at(r0), 100);
-    EXPECT_EQ(**fv.at(r1), 200);
+    EXPECT_EQ(reused, freed);
+    EXPECT_EQ(flv[reused], 99);
 }
 
-TEST(FreelistVectorTest, InsertAfterAllErasedReusesSlots) {
-    FreelistVector<int> fv{};
-    auto i0 = fv.insert(1);
-    auto i1 = fv.insert(2);
+TEST(FreelistVector, Insert_AfterMultipleErases_ReusesInLifoOrder) {
+    FreelistVector<int> flv;
+    flv.insert(0); // 0
+    flv.insert(1); // 1
+    flv.insert(2); // 2
 
-    fv.erase(i0);
-    fv.erase(i1);
+    flv.erase(0u);
+    flv.erase(1u);
 
-    auto r0 = fv.insert(99);
-    EXPECT_TRUE(fv.at(r0).has_value());
-    EXPECT_EQ(**fv.at(r0), 99);
-    // Should not have grown beyond original 2 entries
-    EXPECT_EQ(fv.data.size(), 2u);
+    // Last erased (1) should be reused first (LIFO freelist)
+    auto first_reuse = flv.insert(10);
+    auto second_reuse = flv.insert(20);
+
+    EXPECT_EQ(first_reuse, 1u);
+    EXPECT_EQ(second_reuse, 0u);
+}
+
+// ---------------------------------------------------------------------------
+// Access: at(), operator[], contains()
+// ---------------------------------------------------------------------------
+
+TEST(FreelistVector, At_ValidIndex_ReturnsPointerToValue) {
+    FreelistVector<int> flv;
+    auto index = flv.insert(7);
+    auto result = flv.at(index);
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(**result, 7);
+}
+
+TEST(FreelistVector, At_OutOfBoundsIndex_ReturnsEmpty) {
+    FreelistVector<int> flv;
+    flv.insert(1);
+    EXPECT_FALSE(flv.at(99u).has_value());
+}
+
+TEST(FreelistVector, At_ErasedIndex_ReturnsEmpty) {
+    FreelistVector<int> flv;
+    auto index = flv.insert(3);
+    flv.erase(index);
+    EXPECT_FALSE(flv.at(index).has_value());
+}
+
+TEST(FreelistVector, At_ConstView_ValidIndex_ReturnsPointerToValue) {
+    FreelistVector<int> flv;
+    auto index = flv.insert(99);
+    const auto &cflv = flv;
+    auto result = cflv.at(index);
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(**result, 99);
+}
+
+TEST(FreelistVector, Contains_ValidIndex_ReturnsTrue) {
+    FreelistVector<int> flv;
+    auto index = flv.insert(1);
+    EXPECT_TRUE(flv.contains(index));
+}
+
+TEST(FreelistVector, Contains_ErasedIndex_ReturnsFalse) {
+    FreelistVector<int> flv;
+    auto index = flv.insert(1);
+    flv.erase(index);
+    EXPECT_FALSE(flv.contains(index));
+}
+
+TEST(FreelistVector, Contains_OutOfBoundsIndex_ReturnsFalse) {
+    FreelistVector<int> flv;
+    EXPECT_FALSE(flv.contains(0u));
+}
+
+// ---------------------------------------------------------------------------
+// Iteration
+// ---------------------------------------------------------------------------
+
+TEST(FreelistVector, Iterator_ForwardIteration_SkipsErasedSlots) {
+    FreelistVector<int> flv;
+    flv.insert(10); // 0
+    flv.insert(20); // 1
+    flv.insert(30); // 2
+    flv.erase(1u);
+
+    std::vector<int> result;
+    for (auto &v : flv) result.push_back(v);
+
+    EXPECT_EQ(result, (std::vector<int>{10, 30}));
+}
+
+TEST(FreelistVector, Iterator_EmptyContainer_BeginEqualsEnd) {
+    FreelistVector<int> flv;
+    EXPECT_EQ(flv.begin(), flv.end());
+}
+
+TEST(FreelistVector, Iterator_AllElementsErased_BeginEqualsEnd) {
+    FreelistVector<int> flv;
+    auto a = flv.insert(1);
+    auto b = flv.insert(2);
+    flv.erase(a);
+    flv.erase(b);
+    EXPECT_EQ(flv.begin(), flv.end());
+}
+
+TEST(FreelistVector, ReverseIterator_ReturnsElementsInReverseOrder) {
+    FreelistVector<int> flv;
+    flv.insert(1); // 0
+    flv.insert(2); // 1
+    flv.insert(3); // 2
+    flv.erase(1u);
+
+    std::vector<int> result(flv.rbegin(), flv.rend());
+    EXPECT_EQ(result, (std::vector<int>{3, 1}));
+}
+
+// ---------------------------------------------------------------------------
+// Size / Capacity / Reserve
+// ---------------------------------------------------------------------------
+
+TEST(FreelistVector, Size_AfterInserts_ReflectsUnderlyingStorageSize) {
+    FreelistVector<int> flv;
+    flv.insert(1);
+    flv.insert(2);
+    // size() counts all slots, not just live ones
+    EXPECT_EQ(flv.size(), 2u);
+}
+
+TEST(FreelistVector, Size_AfterErase_DoesNotShrink) {
+    FreelistVector<int> flv;
+    auto index = flv.insert(1);
+    flv.insert(2);
+    flv.erase(index);
+    EXPECT_EQ(flv.size(), 2u);
+}
+
+TEST(FreelistVector, Reserve_SetsCapacityAtLeastToRequestedSize) {
+    FreelistVector<int> flv;
+    flv.reserve(100u);
+    EXPECT_GE(flv.capacity(), 100u);
 }
 
 // ---------------------------------------------------------------------------
 // Clear
 // ---------------------------------------------------------------------------
 
-TEST(FreelistVectorTest, ClearRemovesEverything) {
-    FreelistVector<int> fv{};
-    fv.insert(1);
-    fv.insert(2);
-    fv.insert(3);
-
-    fv.clear();
-
-    EXPECT_EQ(fv.begin(), fv.end());
-    EXPECT_EQ(fv.data.size(), 0u);
+TEST(FreelistVector, Clear_NonEmptyContainer_BecomesEmpty) {
+    FreelistVector<int> flv;
+    flv.insert(1);
+    flv.insert(2);
+    flv.clear();
+    EXPECT_EQ(flv.size(), 0u);
+    EXPECT_EQ(flv.begin(), flv.end());
 }
 
-// ---------------------------------------------------------------------------
-// Reserve
-// ---------------------------------------------------------------------------
-
-TEST(FreelistVectorTest, ReserveIncreasesCapacityOnly) {
-    FreelistVector<int> fv{};
-    fv.reserve(100);
-    EXPECT_GE(fv.capacity(), 100u);
-    EXPECT_EQ(fv.begin(), fv.end());
-}
-
-// ---------------------------------------------------------------------------
-// Iteration — skips erased slots
-// ---------------------------------------------------------------------------
-
-TEST(FreelistVectorTest, IteratorSkipsErasedSlots) {
-    FreelistVector<int> fv{};
-    fv.insert(10);
-    auto i1 = fv.insert(20);
-    fv.insert(30);
-
-    fv.erase(i1);
-
-    std::vector<int> collected;
-    for (auto &v : fv) {
-        collected.push_back(v);
-    }
-
-    ASSERT_EQ(collected.size(), 2u);
-    EXPECT_EQ(collected[0], 10);
-    EXPECT_EQ(collected[1], 30);
-}
-
-TEST(FreelistVectorTest, IteratorOverEmptyContainer) {
-    FreelistVector<int> fv{};
-    int count = 0;
-    for ([[maybe_unused]] auto &v : fv) {
-        ++count;
-    }
-    EXPECT_EQ(count, 0);
-}
-
-TEST(FreelistVectorTest, IteratorOverAllErased) {
-    FreelistVector<int> fv{};
-    auto i0 = fv.insert(1);
-    auto i1 = fv.insert(2);
-    fv.erase(i0);
-    fv.erase(i1);
-
-    int count = 0;
-    for ([[maybe_unused]] auto &v : fv) {
-        ++count;
-    }
-    EXPECT_EQ(count, 0);
-}
-
-// ---------------------------------------------------------------------------
-// Erase by iterator / range
-// ---------------------------------------------------------------------------
-
-TEST(FreelistVectorTest, EraseByIterator) {
-    FreelistVector<int> fv{};
-    auto i0 = fv.insert(10);
-    fv.insert(20);
-
-    fv.erase(fv.begin());
-
-    EXPECT_FALSE(fv.at(i0).has_value());
-}
-
-TEST(FreelistVectorTest, EraseByIteratorRange) {
-    FreelistVector<int> fv{};
-    fv.insert(10);
-    fv.insert(20);
-    fv.insert(30);
-
-    fv.erase(fv.begin(), fv.end());
-
-    int count = 0;
-    for ([[maybe_unused]] auto &v : fv) {
-        ++count;
-    }
-    EXPECT_EQ(count, 0);
+TEST(FreelistVector, Clear_ThenInsert_StartsFromIndexZero) {
+    FreelistVector<int> flv;
+    flv.insert(1);
+    flv.insert(2);
+    flv.clear();
+    auto index = flv.insert(99);
+    EXPECT_EQ(index, 0u);
+    EXPECT_EQ(flv[index], 99);
 }
 
 // ---------------------------------------------------------------------------
 // Swap
 // ---------------------------------------------------------------------------
 
-TEST(FreelistVectorTest, SwapExchangesContents) {
-    FreelistVector<int> a{};
-    FreelistVector<int> b{};
+TEST(FreelistVector, Swap_TwoContainers_ExchangesContents) {
+    FreelistVector<int> a, b;
+    a.insert(1);
+    a.insert(2);
+    b.insert(99);
 
-    auto ai = a.insert(1);
-    b.insert(100);
-    b.insert(200);
+    a.swap(b);
+
+    EXPECT_EQ(a.size(), 1u);
+    EXPECT_EQ(a[0], 99);
+    EXPECT_EQ(b.size(), 2u);
+    EXPECT_EQ(b[0], 1);
+    EXPECT_EQ(b[1], 2);
+}
+
+TEST(FreelistVector, Swap_FreeFunction_ExchangesContents) {
+    FreelistVector<int> a, b;
+    a.insert(10);
+    b.insert(20);
+    b.insert(30);
 
     swap(a, b);
 
-    EXPECT_EQ(a.data.size(), 2u);
-    EXPECT_EQ(b.data.size(), 1u);
-    EXPECT_TRUE(b.at(ai).has_value());
-    EXPECT_EQ(**b.at(ai), 1);
-}
-
-// ---------------------------------------------------------------------------
-// Const access
-// ---------------------------------------------------------------------------
-
-TEST(FreelistVectorTest, ConstAtAndSubscript) {
-    FreelistVector<int> fv{};
-    auto idx = fv.insert(77);
-
-    const auto &cfv = fv;
-
-    auto opt = cfv.at(idx);
-    ASSERT_TRUE(opt.has_value());
-    EXPECT_EQ(**opt, 77);
-
-    EXPECT_EQ(cfv[idx], 77);
-}
-
-TEST(FreelistVectorTest, ConstIteration) {
-    FreelistVector<int> fv{};
-    fv.insert(5);
-    fv.insert(10);
-
-    const auto &cfv = fv;
-
-    int sum = 0;
-    for (const auto &v : cfv) {
-        sum += v;
-    }
-    EXPECT_EQ(sum, 15);
+    EXPECT_EQ(a.size(), 2u);
+    EXPECT_EQ(a[0], 20);
+    EXPECT_EQ(a[1], 30);
+    EXPECT_EQ(b.size(), 1u);
+    EXPECT_EQ(b[0], 10);
 }
 
 // ---------------------------------------------------------------------------

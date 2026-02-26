@@ -21,23 +21,21 @@ endif()
 
 set(VENDOR_DIR ${CMAKE_SOURCE_DIR}/vendor)
 set(SRC_DIR "${CMAKE_SOURCE_DIR}/src")
+set(DEMO_DIR "${CMAKE_SOURCE_DIR}/demo")
 set(TEST_DIR "${CMAKE_SOURCE_DIR}/test")
 
-add_subdirectory(${VENDOR_DIR}/boost)
-add_subdirectory(${VENDOR_DIR}/raylib)
+add_subdirectory(${VENDOR_DIR}/sdl)
 add_subdirectory(${VENDOR_DIR}/glm)
+add_subdirectory(${VENDOR_DIR}/boost)
+add_subdirectory(${VENDOR_DIR}/spdlog)
 add_subdirectory(${VENDOR_DIR}/gtest)
 
 file(GLOB_RECURSE SRCS CONFIGURE_DEPENDS "${SRC_DIR}/*.cpp")
-list(REMOVE_ITEM SRCS
-    ${SRC_DIR}/main.cpp
-)
-
+file(GLOB_RECURSE DEMO_SRCS CONFIGURE_DEPENDS "${DEMO_DIR}/main.cpp")
 file(GLOB_RECURSE TEST_SRCS CONFIGURE_DEPENDS "${TEST_DIR}/main.cpp")
 
 set(INC_DIRS
-    ${VENDOR_DIR}/raylib/src
-
+    ${VENDOR_DIR}/sdl/include
     ${VENDOR_DIR}/boost/libs/core/include
     ${VENDOR_DIR}/boost/libs/config/include
     ${VENDOR_DIR}/boost/libs/assert/include
@@ -47,33 +45,56 @@ set(INC_DIRS
     ${VENDOR_DIR}/boost/libs/move/include
     ${VENDOR_DIR}/boost/libs/intrusive/include
     ${VENDOR_DIR}/boost/libs/container/include
-
+    ${VENDOR_DIR}/spdlog/include
+)
+set(TEST_INC_DIRS
+    ${INC_DIRS}
     ${VENDOR_DIR}/gtest/googletest/include
 )
 
+set(MODS 
+    ${SRCS} 
+    ${VENDOR_DIR}/glm/glm/glm.cppm
+)
+
 set(LINKS
-    raylib
+    SDL3::SDL3
     Boost::container
+    spdlog::spdlog
+)
+set(TEST_LINKS
+    ${LINKS}
     gtest
 )
 
-macro(create_target target exe_source)
+macro(create_target_demo target exe_source)
     add_executable(${target} ${exe_source})
     target_sources(${target}
-        PRIVATE
-        FILE_SET CXX_MODULES FILES
-            ${SRCS}
-            ${VENDOR_DIR}/glm/glm/glm.cppm
+        PRIVATE FILE_SET CXX_MODULES FILES ${MODS}
     )
     target_include_directories(${target} PRIVATE ${INC_DIRS})
     target_link_libraries(${target} PRIVATE ${LINKS})
 endmacro()
 
-create_target(main ${SRC_DIR}/main.cpp)
+macro(create_target_test target exe_source)
+    add_executable(${target} ${exe_source})
+    target_sources(${target}
+        PRIVATE FILE_SET CXX_MODULES FILES ${MODS}
+    )
+    target_include_directories(${target} PRIVATE ${TEST_INC_DIRS})
+    target_link_libraries(${target} PRIVATE ${TEST_LINKS})
+endmacro()
+
+foreach(source IN LISTS DEMO_SRCS) 
+    get_filename_component(parent_dir "${source}" DIRECTORY)
+    get_filename_component(folder "${parent_dir}" NAME)
+    set(target "${folder}_demo")
+    create_target_demo(${target} ${source})
+endforeach()
 
 foreach(source IN LISTS TEST_SRCS) 
     get_filename_component(parent_dir "${source}" DIRECTORY)
     get_filename_component(folder "${parent_dir}" NAME)
     set(target "${folder}_test")
-    create_target(${target} ${source})
+    create_target_test(${target} ${source})
 endforeach()

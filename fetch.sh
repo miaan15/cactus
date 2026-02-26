@@ -4,8 +4,8 @@ set -e
 
 mkdir -p ./vendor
 
-if [ ! -d "./vendor/raylib" ]; then
-    git clone --depth 1 --branch 5.5 https://github.com/raysan5/raylib.git ./vendor/raylib
+if [ ! -d "./vendor/sdl" ]; then
+    git clone --depth 1 --branch release-3.4.2 https://github.com/libsdl-org/SDL.git ./vendor/sdl
 fi
 
 if [ ! -d "./vendor/glm" ]; then
@@ -26,6 +26,14 @@ if [ ! -d "./vendor/boost" ]; then
     git submodule update --init libs/intrusive
     git submodule update --init libs/container
     cd ../..
+fi
+
+if [ ! -d "./vendor/cpptoml" ]; then
+    git clone --depth 1 --branch v0.1.1 https://github.com/skystrife/cpptoml.git ./vendor/cpptoml
+fi
+
+if [ ! -d "./vendor/spdlog" ]; then
+    git clone --depth 1 --branch v1.17.0 https://github.com/gabime/spdlog.git ./vendor/spdlog
 fi
 
 if [ ! -d "./vendor/gtest" ]; then

@@ -56,17 +56,17 @@ TEST(StaticTests, component_id_uniquePerType) {
     EXPECT_NE(posId, hpId);
 }
 
-TEST(StaticTests, is_components_contain_returnsTrueForPresent) {
+TEST(StaticTests, is_contains_component_returnsTrueForPresent) {
     using W = SmallWorld<Position, Velocity, Health>;
-    EXPECT_TRUE(W::is_components_contain<Position>());
-    EXPECT_TRUE(W::is_components_contain<Velocity>());
-    EXPECT_TRUE(W::is_components_contain<Health>());
+    EXPECT_TRUE(W::is_contains_component<Position>());
+    EXPECT_TRUE(W::is_contains_component<Velocity>());
+    EXPECT_TRUE(W::is_contains_component<Health>());
 }
 
-TEST(StaticTests, is_components_contain_returnsFalseForAbsent) {
+TEST(StaticTests, is_contains_component_returnsFalseForAbsent) {
     using W = SmallWorld<Position, Velocity>;
-    EXPECT_FALSE(W::is_components_contain<Health>());
-    EXPECT_FALSE(W::is_components_contain<Tag>());
+    EXPECT_FALSE(W::is_contains_component<Health>());
+    EXPECT_FALSE(W::is_contains_component<Tag>());
 }
 
 TEST(StaticTests, isUniqueConstraintEnforced) {
@@ -81,7 +81,7 @@ TEST(StaticTests, isUniqueConstraintEnforced) {
 TEST(StaticTests, singleComponentWorld) {
     using W = SmallWorld<Position>;
     EXPECT_EQ(W::component_id<Position>(), 0u);
-    EXPECT_TRUE(W::is_components_contain<Position>());
+    EXPECT_TRUE(W::is_contains_component<Position>());
 }
 
 // ============================================================================
