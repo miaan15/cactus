@@ -8,6 +8,11 @@ if [ ! -d "./vendor/sdl" ]; then
     git clone --depth 1 --branch release-3.4.2 https://github.com/libsdl-org/SDL.git ./vendor/sdl
 fi
 
+if [ ! -d "./vendor/sdl_shadercross" ]; then
+    git clone --depth 1 https://github.com/libsdl-org/SDL_shadercross.git ./vendor/sdl_shadercross
+fi
+
+
 if [ ! -d "./vendor/glm" ]; then
     git clone --depth 1 --branch 1.0.3 https://github.com/g-truc/glm.git ./vendor/glm
 fi

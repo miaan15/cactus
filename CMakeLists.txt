@@ -19,12 +19,23 @@ if(USE_ASAN)
     add_link_options(-fsanitize=address)
 endif()
 
+if(WIN32)
+    message(STATUS "Platform: Windows")
+elseif(APPLE)
+    message(STATUS "Platform: macOS / iOS")
+elseif(UNIX AND NOT APPLE)
+    message(STATUS "Platform: Linux")
+else()
+    message(WARNING "Platform: Unknown")
+endif()
+
 set(VENDOR_DIR ${CMAKE_SOURCE_DIR}/vendor)
 set(SRC_DIR "${CMAKE_SOURCE_DIR}/src")
 set(DEMO_DIR "${CMAKE_SOURCE_DIR}/demo")
 set(TEST_DIR "${CMAKE_SOURCE_DIR}/test")
 
 add_subdirectory(${VENDOR_DIR}/sdl)
+add_subdirectory(${VENDOR_DIR}/sdl_shadercross)
 add_subdirectory(${VENDOR_DIR}/glm)
 add_subdirectory(${VENDOR_DIR}/boost)
 add_subdirectory(${VENDOR_DIR}/spdlog)
@@ -36,6 +47,7 @@ file(GLOB_RECURSE TEST_SRCS CONFIGURE_DEPENDS "${TEST_DIR}/main.cpp")
 
 set(INC_DIRS
     ${VENDOR_DIR}/sdl/include
+    ${VENDOR_DIR}/sdl_shadercross/include
     ${VENDOR_DIR}/boost/libs/core/include
     ${VENDOR_DIR}/boost/libs/config/include
     ${VENDOR_DIR}/boost/libs/assert/include
@@ -59,6 +71,7 @@ set(MODS
 
 set(LINKS
     SDL3::SDL3
+    SDL3_shadercross::SDL3_shadercross
     Boost::container
     spdlog::spdlog
 )
