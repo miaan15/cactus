@@ -6,6 +6,7 @@ module;
 #include <cstddef>
 #include <expected>
 #include <memory>
+#include <optional>
 #include <string>
 
 export module Render:Texture;
@@ -24,26 +25,26 @@ export struct LoadTextureError {
 export struct TextureAtlas {
     using SDLTextureUniquePtr = std::unique_ptr<SDL_Texture, decltype(&SDL_DestroyTexture)>;
 
-    std::shared_ptr<SDL_Renderer> renderer;
+    SDL_Renderer *renderer;
     bstc::vector<SDLTextureUniquePtr> textures;
 
-    auto set_renderer(std::shared_ptr<SDL_Renderer> r) {
-        renderer = std::move(r);
+    [[nodiscard]] auto get_texture(TextureID id) -> std::optional<SDL_Texture *> {
+        if (id >= textures.size()) return {};
+        return textures.at(id).get();
     }
 
-    auto load_img(const std::string &dir) -> std::expected<TextureID, LoadTextureError> {
-        SDL_Surface *surface = IMG_Load(dir.c_str());
-        if (!surface) {
-            return std::unexpected{LoadTextureError{SDL_GetError()}};
-        }
+    auto set_renderer(SDL_Renderer *r) {
+        renderer = r;
+    }
 
-        SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer.get(), surface);
+    [[nodiscard]] auto load_img(const std::string &dir)
+        -> std::expected<TextureID, LoadTextureError> {
+        if (!renderer) return std::unexpected{LoadTextureError{"Renderer is missing"}};
+
+        SDL_Texture *texture = IMG_LoadTexture(renderer, dir.c_str());
         if (!texture) {
             return std::unexpected{LoadTextureError{SDL_GetError()}};
         }
-
-        SDL_DestroySurface(surface);
-
         textures.emplace_back(texture, SDL_DestroyTexture);
         return textures.size() - 1;
     }
