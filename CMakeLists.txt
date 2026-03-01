@@ -35,6 +35,7 @@ set(DEMO_DIR "${CMAKE_SOURCE_DIR}/demo")
 set(TEST_DIR "${CMAKE_SOURCE_DIR}/test")
 
 add_subdirectory(${VENDOR_DIR}/sdl)
+add_subdirectory(${VENDOR_DIR}/sdl_image)
 add_subdirectory(${VENDOR_DIR}/sdl_shadercross)
 add_subdirectory(${VENDOR_DIR}/glm)
 add_subdirectory(${VENDOR_DIR}/boost)
@@ -47,6 +48,7 @@ file(GLOB_RECURSE TEST_SRCS CONFIGURE_DEPENDS "${TEST_DIR}/main.cpp")
 
 set(INC_DIRS
     ${VENDOR_DIR}/sdl/include
+    ${VENDOR_DIR}/sdl_image/include
     ${VENDOR_DIR}/sdl_shadercross/include
     ${VENDOR_DIR}/boost/libs/core/include
     ${VENDOR_DIR}/boost/libs/config/include
@@ -71,6 +73,7 @@ set(MODS
 
 set(LINKS
     SDL3::SDL3
+    SDL3_image::SDL3_image
     SDL3_shadercross::SDL3_shadercross
     Boost::container
     spdlog::spdlog
