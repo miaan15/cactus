@@ -27,13 +27,28 @@ if [ ! -d "./vendor/boost" ]; then
     git submodule update --init tools/cmake
     git submodule update --init libs/core
     git submodule update --init libs/config
+    git submodule update --init libs/detail
+    git submodule update --init libs/io
+    git submodule update --init libs/utility
+    git submodule update --init libs/preprocessor
+    git submodule update --init libs/predef
+    git submodule update --init libs/typeof
+    git submodule update --init libs/describe
     git submodule update --init libs/assert
     git submodule update --init libs/static_assert
     git submodule update --init libs/type_traits
     git submodule update --init libs/throw_exception
     git submodule update --init libs/move
     git submodule update --init libs/intrusive
+    git submodule update --init libs/mpl
+    git submodule update --init libs/mp11
+    git submodule update --init libs/bind
+    git submodule update --init libs/function_types
+    git submodule update --init libs/function
+    git submodule update --init libs/container_hash
     git submodule update --init libs/container
+    git submodule update --init libs/functional
+    git submodule update --init libs/unordered
     cd ../..
 fi
 
@@ -43,6 +58,10 @@ fi
 
 if [ ! -d "./vendor/spdlog" ]; then
     git clone --depth 1 --branch v1.17.0 https://github.com/gabime/spdlog.git ./vendor/spdlog
+fi
+
+if [ ! -d "./vendor/tuplet" ]; then
+    git clone --depth 1 https://github.com/codeinred/tuplet.git ./vendor/tuplet
 fi
 
 if [ ! -d "./vendor/gtest" ]; then

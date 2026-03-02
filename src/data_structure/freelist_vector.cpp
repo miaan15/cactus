@@ -25,14 +25,11 @@ struct FreelistVector {
 
         template <typename... Args>
         data_value_type(Args &&...args) : value(std::forward<Args>(args)...) {}
-        data_value_type() : next(0) {}
+
+        data_value_type(data_value_type &&other) noexcept : next(std::move(other.next)) {}
 
         ~data_value_type() {
             value.~value_type();
-        }
-
-        operator value_type() const {
-            return value;
         }
     };
     using data_container_type = Container<data_value_type>;

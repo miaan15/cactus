@@ -40,6 +40,7 @@ add_subdirectory(${VENDOR_DIR}/sdl_shadercross)
 add_subdirectory(${VENDOR_DIR}/glm)
 add_subdirectory(${VENDOR_DIR}/boost)
 add_subdirectory(${VENDOR_DIR}/spdlog)
+add_subdirectory(${VENDOR_DIR}/tuplet)
 add_subdirectory(${VENDOR_DIR}/gtest)
 
 file(GLOB_RECURSE SRCS CONFIGURE_DEPENDS "${SRC_DIR}/*.cpp")
@@ -50,16 +51,12 @@ set(INC_DIRS
     ${VENDOR_DIR}/sdl/include
     ${VENDOR_DIR}/sdl_image/include
     ${VENDOR_DIR}/sdl_shadercross/include
-    ${VENDOR_DIR}/boost/libs/core/include
-    ${VENDOR_DIR}/boost/libs/config/include
-    ${VENDOR_DIR}/boost/libs/assert/include
-    ${VENDOR_DIR}/boost/libs/static_assert/include
-    ${VENDOR_DIR}/boost/libs/type_traits/include
-    ${VENDOR_DIR}/boost/libs/throw_exception/include
-    ${VENDOR_DIR}/boost/libs/move/include
-    ${VENDOR_DIR}/boost/libs/intrusive/include
+    ${VENDOR_DIR}/boost/libs/container_hash/include
     ${VENDOR_DIR}/boost/libs/container/include
+    ${VENDOR_DIR}/boost/libs/functional/include
+    ${VENDOR_DIR}/boost/libs/unordered/include
     ${VENDOR_DIR}/spdlog/include
+    ${VENDOR_DIR}/tuplet/include
 )
 set(TEST_INC_DIRS
     ${INC_DIRS}
@@ -75,8 +72,12 @@ set(LINKS
     SDL3::SDL3
     SDL3_image::SDL3_image
     SDL3_shadercross::SDL3_shadercross
+    Boost::container_hash
     Boost::container
+    Boost::functional
+    Boost::unordered
     spdlog::spdlog
+    tuplet::tuplet
 )
 set(TEST_LINKS
     ${LINKS}
