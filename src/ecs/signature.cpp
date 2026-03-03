@@ -1,9 +1,9 @@
 module;
 
-#include <cstddef>
 #include <cassert>
-#include <cstring>
+#include <cstddef>
 #include <cstdlib>
+#include <cstring>
 
 export module Ecs:Signature;
 
@@ -76,8 +76,8 @@ export struct SignatureAtlas {
     }
 
     [[nodiscard]] auto contains_component(SignatureID sid, ComponentID cid) const -> bool {
-        assert(sid < signature_containers.size());
         if (sid == EMPTY_SIGNATURE_ID) return false;
+        assert(sid < signature_containers.size());
         for (size_t i = 0; i < signature_containers[sid].size; ++i) {
             if (signature_containers[sid].ptr[i] == cid) return true;
         }
@@ -86,11 +86,8 @@ export struct SignatureAtlas {
 
     [[nodiscard]] auto create_or_get_signature_by_add_component(SignatureID existed_id,
                                                                 ComponentID cid) -> SignatureID {
-        assert(existed_id < signature_containers.size());
-        assert(!contains_component(existed_id, cid));
-
-        auto graph_iter = signature_add_component_graph.find({existed_id, cid});
-        if (graph_iter != signature_add_component_graph.end()) {
+        if (auto graph_iter = signature_add_component_graph.find({existed_id, cid});
+            graph_iter != signature_add_component_graph.end()) {
             return graph_iter->second;
         }
 
@@ -105,11 +102,16 @@ export struct SignatureAtlas {
             return signature_containers.size() - 1;
         }
 
-        const auto &existed_signature_container = signature_containers.at(existed_id);
+        assert(existed_id < signature_containers.size());
+        assert(!contains_component(existed_id, cid));
+
+        const auto old_signature_size = signature_containers.at(existed_id).size;
 
         signature_containers.emplace_back(
-            (ComponentID *)malloc((existed_signature_container.size + 1) * sizeof(ComponentID)),
-            existed_signature_container.size + 1);
+            (ComponentID *)malloc((old_signature_size + 1) * sizeof(ComponentID)),
+            old_signature_size + 1);
+
+        const auto &existed_signature_container = signature_containers.at(existed_id);
 
         memcpy(signature_containers.back().ptr, existed_signature_container.ptr,
                existed_signature_container.size * sizeof(ComponentID));
@@ -125,19 +127,21 @@ export struct SignatureAtlas {
 
     [[nodiscard]] auto create_or_get_signature_by_remove_component(SignatureID existed_id,
                                                                    ComponentID cid) -> SignatureID {
-        assert(existed_id < signature_containers.size());
-        assert(contains_component(existed_id, cid));
-
         auto graph_iter = signature_remove_component_graph.find({existed_id, cid});
         if (graph_iter != signature_remove_component_graph.end()) {
             return graph_iter->second;
         }
 
-        const auto &existed_signature_container = signature_containers.at(existed_id);
+        assert(existed_id < signature_containers.size());
+        assert(contains_component(existed_id, cid));
+
+        const auto old_signature_size = signature_containers.at(existed_id).size;
 
         signature_containers.emplace_back(
-            (ComponentID *)malloc((existed_signature_container.size - 1) * sizeof(ComponentID)),
-            existed_signature_container.size - 1);
+            (ComponentID *)malloc((old_signature_size - 1) * sizeof(ComponentID)),
+            old_signature_size - 1);
+
+        const auto &existed_signature_container = signature_containers.at(existed_id);
 
         assert(signature_containers.back().size != 0);
 

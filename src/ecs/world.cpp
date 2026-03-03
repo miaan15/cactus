@@ -5,7 +5,10 @@ module;
 #include <cstdint>
 #include <cstring>
 #include <expected>
+#include <format>
 #include <optional>
+#include <string>
+#include <tuplet/tuple.hpp>
 
 export module Ecs:World;
 
@@ -38,6 +41,53 @@ export struct World {
     bstu::unordered_flat_map<SignatureID, ArchetypeTable> archetype_tables;
     ComponentAtlas component_atlas;
     SignatureAtlas signature_atlas;
+
+    // FIXME: DEBUG STUFF
+    std::string debug_str;
+    [[nodiscard]] auto get_debug() -> const std::string & {
+        debug_str = "";
+
+        debug_str += "Entites:\n";
+        int __i = 0;
+        for (auto &x : entities_status) {
+            debug_str +=
+                std::format("  {}: signature_id {}; row {}\n", __i++, x.signature_id, x.row);
+        }
+
+        debug_str += "Components:\n";
+        for (auto &[id, p] : component_atlas.component_property_map) {
+            debug_str += std::format("  {}: size {} - alignment {}", id, tuplet::get<0>(p),
+                                     tuplet::get<1>(p));
+            debug_str += "\n";
+        }
+
+        debug_str += "Signatures:\n";
+        __i = 0;
+        for (auto &x : signature_atlas.signature_containers) {
+            debug_str += std::format("  signature {} constains: ", __i);
+            for (size_t i = 0; i < x.size; ++i) debug_str += std::format("{} ", x.ptr[i]);
+            debug_str += "\n";
+            ++__i;
+        }
+
+        debug_str += "Archetype tables:\n";
+        for (auto &&[id, table] : archetype_tables) {
+            debug_str += std::format("  signature_id {}: table with {} rows; each size {}\n", id,
+                                     table.row_count, table.row_size);
+
+            for (size_t i = 0; i < table.row_count; ++i) {
+                auto *row_ptr = table.get_row_ptr(i);
+                debug_str += std::format("    row {} owned by {} at {}: ", i,
+                                         table.entity_owned_list_ptr[i], row_ptr);
+                for (std::size_t j = 0; j < table.row_size; ++j) {
+                    debug_str += std::format("{:02x} ", *((char *)row_ptr + j));
+                }
+                debug_str += "\n";
+            }
+        }
+
+        return debug_str;
+    }
 
     [[nodiscard]] auto create_entity() -> Entity {
         auto entity = entities_status.emplace(EMPTY_SIGNATURE_ID, 0);
@@ -78,6 +128,7 @@ export struct World {
         component_atlas.register_component<T>();
         T data{std::forward<Args>(args)...};
         add_or_set_component(entity, component_id<T>(), &data);
+        return {};
     }
 
     template <typename T>
@@ -137,6 +188,7 @@ export struct World {
         const auto &old_signature_container = *signature_atlas.get_container(signature_id);
         const auto &new_signature_container = *signature_atlas.get_container(new_signature_id);
         size_t old_cur_row_offset = 0, new_cur_row_offset = 0;
+        bool flag = false;
         for (size_t i = 0; i < old_signature_container.size; ++i) {
             auto cur_component_id = old_signature_container.ptr[i];
             auto cur_componet_size = component_atlas.get_component_size(cur_component_id);
@@ -160,6 +212,7 @@ export struct World {
                        (std::byte *)old_row_ptr + old_cur_row_offset,
                        old_archetype_table.row_size - old_cur_row_offset);
 
+                flag = true;
                 break;
             }
 
@@ -170,7 +223,7 @@ export struct World {
                 align_up_offset(new_row_ptr, new_cur_row_offset, cur_componet_align)
                 + cur_componet_size;
         }
-        if (new_cur_row_offset == 0) {
+        if (!flag) {
             memcpy(new_row_ptr, old_row_ptr, old_archetype_table.row_size);
             memcpy((std::byte *)new_row_ptr + old_archetype_table.row_size, data, sizeof(T));
         }
