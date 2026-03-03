@@ -1,115 +1,129 @@
-// Implement follow
-// https://github.com/WG21-SG14/SG14/blob/master/SG14/slot_map.h
-
 module;
 
 #include <boost/container/vector.hpp>
-#include <cstdint>
+#include <iterator>
 #include <optional>
-#include <utility>
 
 export module SlotMap;
 
 namespace cactus {
 
-export [[nodiscard]] constexpr auto get_idx(uint64_t k) -> uint32_t {
-    return static_cast<uint32_t>(k >> 32);
-}
-export [[nodiscard]] constexpr auto get_gen(uint64_t k) -> uint32_t {
-    return static_cast<uint32_t>(k);
-}
-export constexpr auto set_idx(uint64_t *k, uint32_t value) -> void {
-    *k = (*k & 0xFFFFFFFFULL) | (static_cast<uint64_t>(value) << 32);
-}
-export constexpr auto increase_gen(uint64_t *k) -> void {
-    uint32_t gen = static_cast<uint32_t>(*k) + 1;
-    *k = (*k & ~0xFFFFFFFFULL) | static_cast<uint64_t>(gen);
-}
-
-export template <typename T, template <class...> class Container = boost::container::vector>
-    requires std::is_same<typename Container<T>::value_type, T>::value
+export template <typename T, typename GenT = size_t,
+                 template <typename...> typename Container = boost::container::vector,
+                 template <typename...> typename SlotContainer = boost::container::vector>
+    requires std::is_same_v<typename Container<T>::value_type, T>
+             && std::is_same_v<typename Container<T>::size_type,
+                               typename SlotContainer<typename Container<T>::size_type>::size_type>
 struct SlotMap {
     using value_type = T;
-    using key_type = uint64_t;
-    using key_index_type = uint32_t;
-    using key_gen_type = uint32_t;
-    using container_type = Container<T>;
+    using container_type = Container<value_type>;
+    using size_type = typename container_type::size_type;
+    using difference_type = typename container_type::difference_type;
     using reference = typename container_type::reference;
     using const_reference = typename container_type::const_reference;
     using pointer = typename container_type::pointer;
     using const_pointer = typename container_type::const_pointer;
+
     using iterator = typename container_type::iterator;
     using const_iterator = typename container_type::const_iterator;
-    using reverse_iterator = typename container_type::reverse_iterator;
-    using const_reverse_iterator = typename container_type::const_reverse_iterator;
-    using size_type = typename container_type::size_type;
+    using reverse_iterator = std::reverse_iterator<iterator>;
+    using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
-    Container<key_type> slots;
-    Container<key_index_type> data_map;
-    Container<value_type> data;
-    key_index_type next_slot_idx = 0;
+    using generation_type = GenT;
 
-    using slot_iterator = decltype(slots)::iterator;
+    struct key_type {
+        size_type index;
+        generation_type gen;
+    };
 
-    constexpr auto find(key_type key) -> iterator {
-        auto slot_idx = get_idx(key);
-        if (slot_idx >= slots.size()) return end();
+    using data_map_container = Container<size_type>;
 
-        auto slot_iter = std::next(slots.begin(), slot_idx);
-        if (get_gen(*slot_iter) != get_gen(key)) return end();
+    using slot_type = key_type;
+    using slot_container_type = SlotContainer<slot_type>;
 
-        return std::next(data.begin(), get_idx(*slot_iter));
+    container_type data;
+    data_map_container data_map;
+    slot_container_type slots;
+    size_type next_slot_index;
+
+    using slot_iterator = typename decltype(slots)::iterator;
+
+    [[nodiscard]] constexpr auto find(key_type key) -> iterator {
+        auto index = key.index;
+        if (index >= slots.size()) return end();
+
+        auto slot_iter = std::next(slots.begin(), index);
+        if (slot_iter->gen != key.gen) return end();
+
+        return std::next(data.begin(), slot_iter->index);
     }
-    constexpr auto find(key_type key) const -> const_iterator {
-        auto slot_idx = get_idx(key);
-        if (slot_idx >= slots.size()) return end();
+    [[nodiscard]] constexpr auto find(key_type key) const -> const_iterator {
+        auto index = key.index;
+        if (index >= slots.size()) return end();
 
-        auto slot_iter = std::next(slots.begin(), slot_idx);
-        if (get_gen(*slot_iter) != get_gen(key)) return end();
+        auto slot_iter = std::next(slots.begin(), index);
+        if (slot_iter->gen != key.gen) return end();
 
-        return std::next(data.begin(), get_idx(*slot_iter));
+        return std::next(data.begin(), slot_iter->index);
     }
 
-    constexpr auto at(key_type key) -> std::optional<pointer> {
+    [[nodiscard]] constexpr auto at(key_type key) -> reference {
+        auto data_iter = this->find(key);
+        if (data_iter == this->end()) throw std::out_of_range("SlotMap::at: invalid key");
+        return *data_iter;
+    }
+    [[nodiscard]] constexpr auto at(key_type key) const -> const_reference {
+        auto data_iter = this->find(key);
+        if (data_iter == this->end()) throw std::out_of_range("SlotMap::at: invalid key");
+        return *data_iter;
+    }
+
+    [[nodiscard]] constexpr auto operator[](key_type key) -> reference {
+        auto slot_iter = std::next(slots.begin(), key.index);
+        return *std::next(data.begin(), slot_iter->index);
+    }
+    [[nodiscard]] constexpr auto operator[](key_type key) const -> const_reference {
+        auto slot_iter = std::next(slots.begin(), key.index);
+        return *std::next(data.begin(), slot_iter->index);
+    }
+
+    [[nodiscard]] constexpr auto contains(key_type key) const -> bool {
+        auto index = key.index;
+        if (index >= data.size()) return false;
+
+        auto slot_iter = std::next(slots.begin(), index);
+        if (slot_iter->gen != key.gen) return false;
+
+        return true;
+    }
+
+    [[nodiscard]] constexpr auto get(key_type key) -> std::optional<pointer> {
         auto data_iter = this->find(key);
         if (data_iter == this->end()) return {};
         return &*data_iter;
     }
-    constexpr auto at(key_type key) const -> std::optional<const_pointer> {
+    [[nodiscard]] constexpr auto get(key_type key) const -> std::optional<const_pointer> {
         auto data_iter = this->find(key);
         if (data_iter == this->end()) return {};
         return &*data_iter;
-    }
-
-    constexpr auto operator[](key_type key) -> reference {
-        auto slot_iter = std::next(slots.begin(), get_idx(key));
-        auto data_iter = std::next(data.begin(), get_idx(*slot_iter));
-        return *data_iter;
-    }
-    constexpr auto operator[](key_type key) const -> const_reference {
-        auto slot_iter = std::next(slots.begin(), get_idx(key));
-        auto data_iter = std::next(data.begin(), get_idx(*slot_iter));
-        return *data_iter;
     }
 
     template <class... Args>
     constexpr auto emplace(Args &&...args) -> key_type {
-        auto data_pos = data.size();
         data.emplace_back(std::forward<Args>(args)...);
-        data_map.emplace_back(next_slot_idx);
+        data_map.emplace_back(next_slot_index);
 
-        if (next_slot_idx == slots.size()) {
-            slots.emplace_back(static_cast<key_type>(next_slot_idx + 1) << 32);
-            // temporary set new slot idx = next_slot_idx + 1 for later update of next_slot_idx
-            // (equal next_slot_idx + 1 if this branch true)
+        if (next_slot_index == slots.size()) {
+            slots.emplace_back(next_slot_index + 1, generation_type{});
+            // set index = next_slot_index + 1 for later next_slot_index assignment
         }
 
-        auto slot_iter = std::next(slots.begin(), next_slot_idx);
-        next_slot_idx = get_idx(*slot_iter);
-        set_idx(&*slot_iter, data_pos);
+        auto slot_iter = std::next(slots.begin(), next_slot_index);
+        next_slot_index = slot_iter->index;
+        slot_iter->index = data.size() - 1;
 
         key_type res = *slot_iter;
-        set_idx(&res, std::distance(slots.begin(), slot_iter));
+        res.index = std::distance(slots.begin(), slot_iter);
         return res;
     }
 
@@ -120,28 +134,31 @@ struct SlotMap {
         return this->emplace(std::move(value));
     }
 
-    constexpr auto erase(const_iterator pos) -> iterator {
-        auto slot_iter = slot_iter_from_data_iter(pos);
-        auto data_idx = get_idx(*slot_iter);
-        auto data_iter = std::next(data.begin(), data_idx);
+    constexpr auto erase(const_iterator iter) -> iterator {
+        auto slot_iter = slot_iter_from_data_iter(iter);
+        auto data_index = slot_iter->index;
+        auto data_iter = std::next(data.begin(), data_index);
         auto last_data_iter = std::prev(data.end());
 
         if (data_iter != last_data_iter) {
             auto last_data_slot_iter = slot_iter_from_data_iter(last_data_iter);
+
             *data_iter = std::move(*last_data_iter);
-            set_idx(&*last_data_slot_iter, data_idx);
-            *std::next(data_map.begin(), data_idx) =
+
+            last_data_iter->index = data_index;
+
+            *std::next(data_map.begin(), data_index) =
                 std::distance(slots.begin(), last_data_slot_iter);
         }
 
         data.pop_back();
         data_map.pop_back();
 
-        set_idx(&*slot_iter, next_slot_idx);
-        next_slot_idx = std::distance(slots.begin(), slot_iter);
+        slot_iter->index = next_slot_index;
+        next_slot_index = std::distance(slots.begin(), slot_iter);
 
-        increase_gen(&*slot_iter);
-        return std::next(data.begin(), data_idx);
+        ++slot_iter->gen;
+        return std::next(data.begin(), data_index);
     }
 
     constexpr auto erase(const_iterator first, const_iterator last) -> iterator {
@@ -176,18 +193,10 @@ struct SlotMap {
     }
 
     constexpr auto clear() -> void {
-        slots.clear();
         data.clear();
         data_map.clear();
-        next_slot_idx = 0;
-    }
-
-    constexpr auto swap(SlotMap &rhs) -> void {
-        using std::swap;
-        swap(slots, rhs.slots);
-        swap(data, rhs.data);
-        swap(data_map, rhs.data_map);
-        swap(next_slot_idx, rhs.next_slot_idx);
+        slots.clear();
+        next_slot_index = 0;
     }
 
     constexpr iterator begin() {
@@ -228,7 +237,7 @@ struct SlotMap {
     }
 
     constexpr auto empty() const -> bool {
-        return data.size() == 0;
+        return data.empty();
     }
     constexpr auto size() const -> size_type {
         return data.size();
@@ -243,10 +252,5 @@ struct SlotMap {
         return std::next(slots.begin(), slot_index);
     }
 };
-
-export template <class T, template <class...> class Container>
-constexpr void swap(SlotMap<T, Container> &lhs, SlotMap<T, Container> &rhs) {
-    lhs.swap(rhs);
-}
 
 } // namespace cactus
