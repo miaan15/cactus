@@ -1,5 +1,6 @@
 module;
 
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cstdlib>
@@ -17,34 +18,48 @@ export using SignatureID = size_t;
 export constexpr SignatureID EMPTY_SIGNATURE_ID = (SignatureID)-1;
 
 export struct SignatureAtlas {
-    struct SignatureContainer {
+    struct SignatureData {
         ComponentID *ptr;
         size_t size;
-    };
 
-    struct SignatureGraphTransition {
-        SignatureID from;
-        ComponentID component;
-
-        auto operator<=>(const SignatureGraphTransition &) const = default;
+        bool operator==(const SignatureData &other) const {
+            if (size != other.size) return false;
+            return std::equal(ptr, ptr + size, other.ptr);
+        }
 
         struct Hasher {
-            auto operator()(const SignatureGraphTransition &t) const -> size_t {
-                size_t seed = 0;
-                boost::hash_combine(seed, t.from);
-                boost::hash_combine(seed, t.component);
-                return seed;
+            auto operator()(const SignatureData &t) const -> size_t {
+                return boost::hash_range(t.ptr, t.ptr + t.size);
             }
         };
     };
 
-    bstc::vector<SignatureContainer> signature_containers;
-    bstu::unordered_flat_map<SignatureGraphTransition, SignatureID,
-                             SignatureGraphTransition::Hasher>
-        signature_add_component_graph;
-    bstu::unordered_flat_map<SignatureGraphTransition, SignatureID,
-                             SignatureGraphTransition::Hasher>
-        signature_remove_component_graph;
+    struct SignatureCacheTransition {
+        SignatureID from;
+        ComponentID component;
+
+        auto operator<=>(const SignatureCacheTransition &) const = default;
+
+        struct Hasher {
+            auto operator()(const SignatureCacheTransition &t) const -> size_t {
+                size_t res = 0;
+                boost::hash_combine(res, t.from);
+                boost::hash_combine(res, t.component);
+                return res;
+            }
+        };
+    };
+
+    bstc::vector<SignatureData> signature_datas;
+
+    bstu::unordered_flat_map<SignatureData, SignatureID, SignatureData::Hasher> data_to_id_map;
+
+    bstu::unordered_flat_map<SignatureCacheTransition, SignatureID,
+                             SignatureCacheTransition::Hasher>
+        signature_add_component_cache;
+    bstu::unordered_flat_map<SignatureCacheTransition, SignatureID,
+                             SignatureCacheTransition::Hasher>
+        signature_remove_component_cache;
 
     SignatureAtlas() = default;
     SignatureAtlas(const SignatureAtlas &) = delete;
@@ -52,115 +67,137 @@ export struct SignatureAtlas {
     SignatureAtlas(SignatureAtlas &&) noexcept = default;
     SignatureAtlas &operator=(SignatureAtlas &&) noexcept = default;
     ~SignatureAtlas() {
-        for (auto &c : signature_containers) {
+        for (auto &c : signature_datas) {
             free(c.ptr);
         }
     }
 
-    [[nodiscard]] auto get_container(SignatureID id) -> SignatureContainer * {
-        assert(id < signature_containers.size());
-        return &signature_containers[id];
+    [[nodiscard]] auto get_data(SignatureID id) -> SignatureData * {
+        assert(id < signature_datas.size());
+        return &signature_datas[id];
     }
-    [[nodiscard]] auto get_container(SignatureID id) const -> const SignatureContainer * {
-        assert(id < signature_containers.size());
-        return &signature_containers[id];
+    [[nodiscard]] auto get_data(SignatureID id) const -> const SignatureData * {
+        assert(id < signature_datas.size());
+        return &signature_datas[id];
     }
 
     [[nodiscard]] auto component_index(SignatureID sid, ComponentID cid) const -> size_t {
-        assert(sid < signature_containers.size());
+        assert(sid < signature_datas.size());
         assert(sid != EMPTY_SIGNATURE_ID);
-        for (size_t i = 0; i < signature_containers[sid].size; ++i) {
-            if (signature_containers[sid].ptr[i] == cid) return i;
+        for (size_t i = 0; i < signature_datas[sid].size; ++i) {
+            if (signature_datas[sid].ptr[i] == cid) return i;
         }
         assert(false);
     }
 
     [[nodiscard]] auto contains_component(SignatureID sid, ComponentID cid) const -> bool {
         if (sid == EMPTY_SIGNATURE_ID) return false;
-        assert(sid < signature_containers.size());
-        for (size_t i = 0; i < signature_containers[sid].size; ++i) {
-            if (signature_containers[sid].ptr[i] == cid) return true;
+        assert(sid < signature_datas.size());
+        for (size_t i = 0; i < signature_datas[sid].size; ++i) {
+            if (signature_datas[sid].ptr[i] == cid) return true;
         }
         return false;
     }
 
     [[nodiscard]] auto create_or_get_signature_by_add_component(SignatureID existed_id,
                                                                 ComponentID cid) -> SignatureID {
-        if (auto graph_iter = signature_add_component_graph.find({existed_id, cid});
-            graph_iter != signature_add_component_graph.end()) {
-            return graph_iter->second;
+        if (auto cache_iter = signature_add_component_cache.find({existed_id, cid});
+            cache_iter != signature_add_component_cache.end()) {
+            return cache_iter->second;
         }
 
         if (existed_id == EMPTY_SIGNATURE_ID) {
-            signature_containers.emplace_back((ComponentID *)malloc(1 * sizeof(ComponentID)), 1);
-            signature_containers.back().ptr[0] = cid;
+            signature_datas.emplace_back(
+                SignatureData{(ComponentID *)malloc(1 * sizeof(ComponentID)), 1});
+            signature_datas.back().ptr[0] = cid;
 
-            signature_add_component_graph.emplace(SignatureGraphTransition{existed_id, cid},
-                                                  signature_containers.size() - 1);
-            signature_remove_component_graph.emplace(
-                SignatureGraphTransition{signature_containers.size() - 1, cid}, existed_id);
-            return signature_containers.size() - 1;
+            signature_add_component_cache.emplace(SignatureCacheTransition{existed_id, cid},
+                                                  signature_datas.size() - 1);
+            signature_remove_component_cache.emplace(
+                SignatureCacheTransition{signature_datas.size() - 1, cid}, existed_id);
+
+            return signature_datas.size() - 1;
         }
 
-        assert(existed_id < signature_containers.size());
+        assert(existed_id < signature_datas.size());
         assert(!contains_component(existed_id, cid));
 
-        const auto old_signature_size = signature_containers.at(existed_id).size;
+        const auto &old_data = signature_datas[existed_id];
 
-        signature_containers.emplace_back(
-            (ComponentID *)malloc((old_signature_size + 1) * sizeof(ComponentID)),
-            old_signature_size + 1);
+        size_t index = 0;
+        while (index < old_data.size) {
+            if (old_data.ptr[index] > cid) break;
+            ++index;
+        }
 
-        const auto &existed_signature_container = signature_containers.at(existed_id);
+        const auto new_size = old_data.size + 1;
+        auto *temp_new_data = (ComponentID *)alloca(new_size * sizeof(ComponentID));
+        memcpy(&temp_new_data[0], &old_data.ptr[0], index * sizeof(ComponentID));
+        temp_new_data[index] = cid;
+        memcpy(&temp_new_data[index + 1], &old_data.ptr[index],
+               (old_data.size - index) * sizeof(ComponentID));
 
-        memcpy(signature_containers.back().ptr, existed_signature_container.ptr,
-               existed_signature_container.size * sizeof(ComponentID));
-        signature_containers.back().ptr[existed_signature_container.size] = cid;
+        auto temp_new_signature_id_iter =
+            data_to_id_map.find(SignatureData{temp_new_data, new_size});
+        size_t new_id;
+        if (temp_new_signature_id_iter == data_to_id_map.end()) {
+            signature_datas.emplace_back(
+                SignatureData{(ComponentID *)malloc(new_size * sizeof(ComponentID)), new_size});
+            auto &new_data = signature_datas.back();
+            memcpy(&new_data.ptr[0], temp_new_data, new_size * sizeof(size_t));
 
-        signature_add_component_graph.emplace(SignatureGraphTransition{existed_id, cid},
-                                              signature_containers.size() - 1);
-        signature_remove_component_graph.emplace(
-            SignatureGraphTransition{signature_containers.size() - 1, cid}, existed_id);
+            new_id = signature_datas.size() - 1;
+            data_to_id_map.emplace(new_data, new_id);
+        } else {
+            new_id = temp_new_signature_id_iter->second;
+        }
 
-        return signature_containers.size() - 1;
+        signature_add_component_cache.emplace(SignatureCacheTransition{existed_id, cid}, new_id);
+
+        return new_id;
     }
 
     [[nodiscard]] auto create_or_get_signature_by_remove_component(SignatureID existed_id,
                                                                    ComponentID cid) -> SignatureID {
-        auto graph_iter = signature_remove_component_graph.find({existed_id, cid});
-        if (graph_iter != signature_remove_component_graph.end()) {
-            return graph_iter->second;
+        auto cache_iter = signature_remove_component_cache.find({existed_id, cid});
+        if (cache_iter != signature_remove_component_cache.end()) {
+            return cache_iter->second;
         }
 
-        assert(existed_id < signature_containers.size());
+        assert(existed_id < signature_datas.size());
         assert(contains_component(existed_id, cid));
 
-        const auto old_signature_size = signature_containers.at(existed_id).size;
+        const auto &old_data = signature_datas[existed_id];
 
-        signature_containers.emplace_back(
-            (ComponentID *)malloc((old_signature_size - 1) * sizeof(ComponentID)),
-            old_signature_size - 1);
+        const auto new_size = old_data.size + 1;
+        auto *temp_new_data = (size_t *)alloca(new_size * sizeof(size_t));
 
-        const auto &existed_signature_container = signature_containers.at(existed_id);
-
-        assert(signature_containers.back().size != 0);
-
-        auto component_offset = (size_t)-1;
-        for (int i = 0; i < existed_signature_container.size; ++i) {
-            if (existed_signature_container.ptr[i] == cid) component_offset = i;
+        for (size_t i = 0; i < old_data.size; ++i) {
+            if (old_data.ptr[i] == cid) {
+                memcpy(&temp_new_data[0], &old_data.ptr[0], i * sizeof(size_t));
+                memcpy(&temp_new_data[i], &old_data.ptr[i + 1], (new_size - i) * sizeof(size_t));
+                break;
+            }
         }
-        memcpy(signature_containers.back().ptr, existed_signature_container.ptr,
-               component_offset * sizeof(ComponentID));
-        memcpy(signature_containers.back().ptr + component_offset,
-               existed_signature_container.ptr + (component_offset + 1),
-               component_offset * sizeof(ComponentID));
 
-        signature_remove_component_graph.emplace(SignatureGraphTransition{existed_id, cid},
-                                                 signature_containers.size() - 1);
-        signature_add_component_graph.emplace(
-            SignatureGraphTransition{signature_containers.size() - 1, cid}, existed_id);
+        auto temp_new_signature_id_iter =
+            data_to_id_map.find(SignatureData{temp_new_data, new_size});
+        size_t new_id;
+        if (temp_new_signature_id_iter == data_to_id_map.end()) {
+            signature_datas.emplace_back(
+                SignatureData{(ComponentID *)malloc(new_size * sizeof(ComponentID)), new_size});
+            auto &new_data = signature_datas.back();
+            memcpy(&new_data.ptr[0], temp_new_data, new_size * sizeof(size_t));
 
-        return signature_containers.size() - 1;
+            new_id = signature_datas.size() - 1;
+            data_to_id_map.emplace(new_data, new_id);
+        } else {
+            new_id = temp_new_signature_id_iter->second;
+        }
+
+        signature_remove_component_cache.emplace(SignatureCacheTransition{existed_id, cid}, new_id);
+
+        return new_id;
     }
 };
 

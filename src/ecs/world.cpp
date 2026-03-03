@@ -63,7 +63,7 @@ export struct World {
 
         debug_str += "Signatures:\n";
         __i = 0;
-        for (auto &x : signature_atlas.signature_containers) {
+        for (auto &x : signature_atlas.signature_datas) {
             debug_str += std::format("  signature {} constains: ", __i);
             for (size_t i = 0; i < x.size; ++i) debug_str += std::format("{} ", x.ptr[i]);
             debug_str += "\n";
@@ -185,16 +185,16 @@ export struct World {
         auto *old_row_ptr = old_archetype_table.get_row_ptr(old_row);
         auto *new_row_ptr = new_archetype_table.get_row_ptr(new_row);
 
-        const auto &old_signature_container = *signature_atlas.get_container(signature_id);
-        const auto &new_signature_container = *signature_atlas.get_container(new_signature_id);
+        const auto &old_signature_data = *signature_atlas.get_data(signature_id);
+        const auto &new_signature_data = *signature_atlas.get_data(new_signature_id);
         size_t old_cur_row_offset = 0, new_cur_row_offset = 0;
         bool flag = false;
-        for (size_t i = 0; i < old_signature_container.size; ++i) {
-            auto cur_component_id = old_signature_container.ptr[i];
+        for (size_t i = 0; i < old_signature_data.size; ++i) {
+            auto cur_component_id = old_signature_data.ptr[i];
             auto cur_componet_size = component_atlas.get_component_size(cur_component_id);
             auto cur_componet_align = component_atlas.get_component_alignment(cur_component_id);
 
-            if (new_signature_container.ptr[i] == component_id) {
+            if (new_signature_data.ptr[i] == component_id) {
                 memcpy(new_row_ptr, old_row_ptr, old_cur_row_offset);
 
                 new_cur_row_offset = align_up_offset(new_row_ptr, new_cur_row_offset, alignof(T));
@@ -295,15 +295,15 @@ export struct World {
         auto *old_row_ptr = old_archetype_table.get_row_ptr(old_row);
         auto *new_row_ptr = new_archetype_table.get_row_ptr(new_row);
 
-        const auto &old_signature_container = *signature_atlas.get_container(signature_id);
-        const auto &new_signature_container = *signature_atlas.get_container(new_signature_id);
+        const auto &old_signature_data = *signature_atlas.get_data(signature_id);
+        const auto &new_signature_data = *signature_atlas.get_data(new_signature_id);
         size_t old_cur_row_offset = 0, new_cur_row_offset = 0;
-        for (size_t i = 0; i < old_signature_container.size; ++i) {
-            auto cur_component_id = old_signature_container.ptr[i];
+        for (size_t i = 0; i < old_signature_data.size; ++i) {
+            auto cur_component_id = old_signature_data.ptr[i];
             auto cur_componet_size = component_atlas.get_component_size(cur_component_id);
             auto cur_componet_align = component_atlas.get_component_alignment(cur_component_id);
 
-            if (new_signature_container.ptr[i] == component_id) {
+            if (new_signature_data.ptr[i] == component_id) {
                 memcpy(new_row_ptr, old_row_ptr, old_cur_row_offset);
 
                 new_cur_row_offset =
@@ -336,27 +336,27 @@ export struct World {
     }
 
     [[nodiscard]] auto signature_row_size(SignatureID sid) const -> size_t {
-        assert(sid < signature_atlas.signature_containers.size());
+        assert(sid < signature_atlas.signature_datas.size());
 
         size_t size = 0;
-        const auto &signature_container = *signature_atlas.get_container(sid);
-        for (size_t i = 0; i < signature_container.size; ++i) {
-            auto csize = component_atlas.get_component_size(signature_container.ptr[i]);
-            auto calign = component_atlas.get_component_alignment(signature_container.ptr[i]);
+        const auto &signature_data = *signature_atlas.get_data(sid);
+        for (size_t i = 0; i < signature_data.size; ++i) {
+            auto csize = component_atlas.get_component_size(signature_data.ptr[i]);
+            auto calign = component_atlas.get_component_alignment(signature_data.ptr[i]);
             size = align_up(size, calign) + csize;
         }
         return size;
     }
 
     [[nodiscard]] auto row_offset_of_component(SignatureID sid, ComponentID cid) const -> size_t {
-        assert(sid < signature_atlas.signature_containers.size());
+        assert(sid < signature_atlas.signature_datas.size());
         assert(signature_atlas.contains_component(sid, cid));
 
         size_t offset = 0;
-        auto *cur_component_ptr = signature_atlas.signature_containers.at(sid).ptr;
+        auto *cur_component_ptr = signature_atlas.signature_datas.at(sid).ptr;
         while (*cur_component_ptr != cid) {
-            assert(cur_component_ptr - signature_atlas.signature_containers.at(sid).ptr
-                   < signature_atlas.signature_containers.at(sid).size - 1);
+            assert(cur_component_ptr - signature_atlas.signature_datas.at(sid).ptr
+                   < signature_atlas.signature_datas.at(sid).size - 1);
 
             auto csize = component_atlas.get_component_size(*cur_component_ptr);
             auto calign = component_atlas.get_component_alignment(*cur_component_ptr);

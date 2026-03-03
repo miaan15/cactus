@@ -19,6 +19,7 @@ namespace unordered {
 using ::boost::unordered::unordered_flat_map;
 }
 using ::boost::hash_combine;
+using ::boost::hash_range;
 } // namespace boost
 
 namespace cactus::ecs {
