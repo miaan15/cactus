@@ -119,7 +119,7 @@ struct SlotMap {
 
     [[nodiscard]] constexpr auto contains(const key_type &key) const -> bool {
         auto index = key.index;
-        if (index >= data.size()) return false;
+        if (index >= slots.size()) return false;
 
         auto slot_iter = std::next(slots.begin(), index);
         if (slot_iter->gen != key.gen) return false;
