@@ -3,6 +3,7 @@ module;
 #include <cstddef>
 #include <cstdlib>
 #include <tuplet/tuple.hpp>
+#include <cassert>
 #include <typeinfo>
 
 export module Ecs:Component;
@@ -27,12 +28,12 @@ export struct ComponentAtlas {
 
     auto get_component_size(ComponentID id) const -> size_t {
         auto iter = component_property_map.find(id);
-        if (iter == component_property_map.end()) return (size_t)-1;
+        assert(iter != component_property_map.end());
         return tuplet::get<0>(iter->second);
     }
     auto get_component_alignment(ComponentID id) const -> size_t {
         auto iter = component_property_map.find(id);
-        if (iter == component_property_map.end()) return (size_t)-1;
+        assert(iter != component_property_map.end());
         return tuplet::get<1>(iter->second);
     }
 

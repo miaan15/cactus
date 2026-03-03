@@ -90,7 +90,7 @@ export struct World {
     }
 
     [[nodiscard]] auto create_entity() -> Entity {
-        auto entity = entities_status.emplace(EMPTY_SIGNATURE_ID, 0);
+        auto entity = entities_status.emplace(EntityStatus{EMPTY_SIGNATURE_ID, 0});
         return entity;
     }
 
@@ -303,7 +303,7 @@ export struct World {
             auto cur_componet_size = component_atlas.get_component_size(cur_component_id);
             auto cur_componet_align = component_atlas.get_component_alignment(cur_component_id);
 
-            if (new_signature_data.ptr[i] == component_id) {
+            if (old_signature_data.ptr[i] == component_id) {
                 memcpy(new_row_ptr, old_row_ptr, old_cur_row_offset);
 
                 new_cur_row_offset =
@@ -330,7 +330,22 @@ export struct World {
                 + cur_componet_size;
         }
 
-        const auto new_column_offset = row_offset_of_component(new_signature_id, component_id);
+        new_archetype_table.entity_owned_list_ptr[new_row] = entity;
+
+        entities_status[entity].signature_id = new_signature_id;
+        entities_status[entity].row = new_row;
+
+        auto old_last_row = old_archetype_table.row_count - 1;
+        if (old_last_row != old_row) {
+            auto *old_last_row_ptr = old_archetype_table.get_row_ptr(old_last_row);
+
+            memcpy(old_row_ptr, old_last_row_ptr, old_archetype_table.row_size);
+            old_archetype_table.entity_owned_list_ptr[old_row] =
+                old_archetype_table.entity_owned_list_ptr[old_last_row];
+
+            entities_status[old_archetype_table.entity_owned_list_ptr[old_last_row]].row = old_row;
+        }
+        --old_archetype_table.row_count;
 
         return true;
     }

@@ -169,7 +169,7 @@ export struct SignatureAtlas {
 
         const auto &old_data = signature_datas[existed_id];
 
-        const auto new_size = old_data.size + 1;
+        const auto new_size = old_data.size - 1;
         auto *temp_new_data = (size_t *)alloca(new_size * sizeof(size_t));
 
         for (size_t i = 0; i < old_data.size; ++i) {

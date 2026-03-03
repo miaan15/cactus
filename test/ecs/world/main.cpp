@@ -155,10 +155,20 @@ TEST(EmplaceGet, Align) {
 
     std::println("{}", w.get_debug());
 
-    // w.erase_component<bool>(e0);
-    // w.erase_component<float>(e0);
-    //
-    // std::println("{}", w.get_debug());
+    w.erase_component<bool>(e0);
+    w.erase_component<float>(e0);
+
+    std::println("{}", w.get_debug());
+
+    w.erase_component<bool>(e1);
+    w.erase_component<float>(e1);
+
+    std::println("{}", w.get_debug());
+
+    w.emplace_component<double>(e0, 5.f);
+    w.emplace_component<float>(e0, 5.f);
+
+    std::println("{}", w.get_debug());
 }
 
 // ---------------------------------------------------------------------------
