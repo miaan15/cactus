@@ -3,6 +3,7 @@ module;
 #include <boost/container/vector.hpp>
 #include <iterator>
 #include <optional>
+#include <tuplet/tuple.hpp>
 
 export module SlotMap;
 
@@ -26,15 +27,26 @@ struct SlotMap {
 
     using iterator = typename container_type::iterator;
     using const_iterator = typename container_type::const_iterator;
-    using reverse_iterator = std::reverse_iterator<iterator>;
-    using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+    using reverse_iterator = typename container_type::reverse_iterator;
+    using const_reverse_iterator = typename container_type::const_reverse_iterator;
 
     using generation_type = GenT;
 
     struct key_type {
         size_type index;
         generation_type gen;
+
+        static constexpr key_type from(const tuplet::tuple<size_t, size_t> &t) {
+            return {tuplet::get<0>(t), tuplet::get<1>(t)};
+        }
+
+        operator tuplet::tuple<size_t, size_t>() const {
+            return {index, gen};
+        }
+
+        constexpr auto operator<=>(const key_type &other) const = default;
     };
+    using key_tuple_type = tuplet::tuple<size_type, generation_type>;
 
     using data_map_container = Container<size_type>;
 
@@ -48,7 +60,7 @@ struct SlotMap {
 
     using slot_iterator = typename decltype(slots)::iterator;
 
-    [[nodiscard]] constexpr auto find(key_type key) -> iterator {
+    [[nodiscard]] constexpr auto find(const key_type &key) -> iterator {
         auto index = key.index;
         if (index >= slots.size()) return end();
 
@@ -57,7 +69,7 @@ struct SlotMap {
 
         return std::next(data.begin(), slot_iter->index);
     }
-    [[nodiscard]] constexpr auto find(key_type key) const -> const_iterator {
+    [[nodiscard]] constexpr auto find(const key_type &key) const -> const_iterator {
         auto index = key.index;
         if (index >= slots.size()) return end();
 
@@ -66,28 +78,46 @@ struct SlotMap {
 
         return std::next(data.begin(), slot_iter->index);
     }
+    [[nodiscard]] constexpr auto find(const key_tuple_type &key) -> iterator {
+        return find(key_type::from(key));
+    }
+    [[nodiscard]] constexpr auto find(const key_tuple_type &key) const -> const_iterator {
+        return find(key_type::from(key));
+    }
 
-    [[nodiscard]] constexpr auto at(key_type key) -> reference {
+    [[nodiscard]] constexpr auto at(const key_type &key) -> reference {
         auto data_iter = this->find(key);
         if (data_iter == this->end()) throw std::out_of_range("SlotMap::at: invalid key");
         return *data_iter;
     }
-    [[nodiscard]] constexpr auto at(key_type key) const -> const_reference {
+    [[nodiscard]] constexpr auto at(const key_type &key) const -> const_reference {
         auto data_iter = this->find(key);
         if (data_iter == this->end()) throw std::out_of_range("SlotMap::at: invalid key");
         return *data_iter;
     }
+    [[nodiscard]] constexpr auto at(const key_tuple_type &key) -> reference {
+        return at(key_type::from(key));
+    }
+    [[nodiscard]] constexpr auto at(const key_tuple_type &key) const -> const_reference {
+        return at(key_type::from(key));
+    }
 
-    [[nodiscard]] constexpr auto operator[](key_type key) -> reference {
+    [[nodiscard]] constexpr auto operator[](const key_type &key) -> reference {
         auto slot_iter = std::next(slots.begin(), key.index);
         return *std::next(data.begin(), slot_iter->index);
     }
-    [[nodiscard]] constexpr auto operator[](key_type key) const -> const_reference {
+    [[nodiscard]] constexpr auto operator[](const key_type &key) const -> const_reference {
         auto slot_iter = std::next(slots.begin(), key.index);
         return *std::next(data.begin(), slot_iter->index);
     }
+    [[nodiscard]] constexpr auto operator[](const key_tuple_type &key) -> reference {
+        return operator[](key_type::from(key));
+    }
+    [[nodiscard]] constexpr auto operator[](const key_tuple_type &key) const -> const_reference {
+        return operator[](key_type::from(key));
+    }
 
-    [[nodiscard]] constexpr auto contains(key_type key) const -> bool {
+    [[nodiscard]] constexpr auto contains(const key_type &key) const -> bool {
         auto index = key.index;
         if (index >= data.size()) return false;
 
@@ -96,16 +126,26 @@ struct SlotMap {
 
         return true;
     }
+    [[nodiscard]] constexpr auto contains(const key_tuple_type &key) const -> bool {
+        return contains(key_type::from(key));
+    }
 
-    [[nodiscard]] constexpr auto get(key_type key) -> std::optional<pointer> {
+    [[nodiscard]] constexpr auto get(const key_type &key) -> std::optional<pointer> {
         auto data_iter = this->find(key);
         if (data_iter == this->end()) return {};
         return &*data_iter;
     }
-    [[nodiscard]] constexpr auto get(key_type key) const -> std::optional<const_pointer> {
+    [[nodiscard]] constexpr auto get(const key_type &key) const -> std::optional<const_pointer> {
         auto data_iter = this->find(key);
         if (data_iter == this->end()) return {};
         return &*data_iter;
+    }
+    [[nodiscard]] constexpr auto get(const key_tuple_type &key) -> std::optional<pointer> {
+        return get(key_type::from(key));
+    }
+    [[nodiscard]] constexpr auto get(const key_tuple_type &key) const
+        -> std::optional<const_pointer> {
+        return get(key_type::from(key));
     }
 
     template <class... Args>
@@ -145,7 +185,7 @@ struct SlotMap {
 
             *data_iter = std::move(*last_data_iter);
 
-            last_data_iter->index = data_index;
+            last_data_slot_iter->index = data_index;
 
             *std::next(data_map.begin(), data_index) =
                 std::distance(slots.begin(), last_data_slot_iter);
@@ -178,7 +218,7 @@ struct SlotMap {
     constexpr auto erase(iterator first, iterator last) -> iterator {
         return this->erase(const_iterator(first), const_iterator(last));
     }
-    constexpr auto erase(key_type key) -> iterator {
+    constexpr auto erase(const key_type &key) -> iterator {
         auto iter = this->find(key);
         if (iter == this->end()) {
             return end();

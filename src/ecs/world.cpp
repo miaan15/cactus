@@ -4,7 +4,6 @@ module;
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <expected>
 #include <format>
 #include <optional>
 #include <string>
@@ -18,7 +17,6 @@ import :Signature;
 import :Archetype;
 
 import SlotMap;
-import FreelistVector;
 
 namespace cactus::ecs {
 
@@ -37,7 +35,7 @@ export struct World {
         size_t row;
     };
 
-    FreelistVector<EntityStatus> entities_status;
+    SlotMap<EntityStatus> entities_status;
     bstu::unordered_flat_map<SignatureID, ArchetypeTable> archetype_tables;
     ComponentAtlas component_atlas;
     SignatureAtlas signature_atlas;
@@ -78,7 +76,7 @@ export struct World {
             for (size_t i = 0; i < table.row_count; ++i) {
                 auto *row_ptr = table.get_row_ptr(i);
                 debug_str += std::format("    row {} owned by {} at {}: ", i,
-                                         table.entity_owned_list_ptr[i], row_ptr);
+                                         tuplet::get<0>(table.entity_owned_list_ptr[i]), row_ptr);
                 for (std::size_t j = 0; j < table.row_size; ++j) {
                     debug_str += std::format("{:02x} ", *((char *)row_ptr + j));
                 }
@@ -90,7 +88,7 @@ export struct World {
     }
 
     [[nodiscard]] auto create_entity() -> Entity {
-        auto entity = entities_status.emplace(EntityStatus{EMPTY_SIGNATURE_ID, 0});
+        auto entity = entities_status.emplace(EMPTY_SIGNATURE_ID, 0);
         return entity;
     }
 
@@ -123,22 +121,22 @@ export struct World {
     }
 
     template <typename T, typename... Args>
-    auto emplace_component(Entity entity, Args... args) -> std::expected<void, bool> {
-        if (!contains_entity(entity)) return std::unexpected{0};
+    auto emplace_component(Entity entity, Args... args) -> bool {
+        if (!contains_entity(entity)) return false;
         component_atlas.register_component<T>();
         T data{std::forward<Args>(args)...};
-        add_or_set_component(entity, component_id<T>(), &data);
-        return {};
+        add_or_set_component_raw(entity, component_id<T>(), &data);
+        return true;
     }
 
     template <typename T>
-    auto erase_component(Entity entity) -> std::expected<bool, bool> {
-        if (!contains_entity(entity)) return std::unexpected{0};
-        return try_remove_component(entity, component_id<T>());
+    auto remove_component(Entity entity) -> bool {
+        if (!contains_entity(entity)) return false;
+        return try_remove_component_raw(entity, component_id<T>());
     }
 
     template <typename T>
-    auto add_or_set_component(Entity entity, ComponentID component_id, T *data) {
+    auto add_or_set_component_raw(Entity entity, ComponentID component_id, T *data) {
         assert(entities_status.contains(entity));
         auto signature_id = entities_status[entity].signature_id;
         assert(archetype_tables.contains(signature_id) || signature_id == EMPTY_SIGNATURE_ID);
@@ -246,7 +244,7 @@ export struct World {
         --old_archetype_table.row_count;
     }
 
-    auto try_remove_component(Entity entity, ComponentID component_id) -> bool {
+    auto try_remove_component_raw(Entity entity, ComponentID component_id) -> bool {
         assert(entities_status.contains(entity));
         auto signature_id = entities_status[entity].signature_id;
         assert(archetype_tables.contains(signature_id) || signature_id == EMPTY_SIGNATURE_ID);

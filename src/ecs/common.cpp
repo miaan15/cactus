@@ -2,11 +2,14 @@ module;
 
 #include <cstddef>
 
+#include <tuplet/tuple.hpp>
 #include <boost/container/vector.hpp>
 #include <boost/container_hash/hash.hpp>
 #include <boost/unordered/unordered_flat_map.hpp>
 
 export module Ecs:Common;
+
+import SlotMap;
 
 export namespace bstc = boost::container;
 export namespace bstu = boost::unordered;
@@ -24,6 +27,6 @@ using ::boost::hash_range;
 
 namespace cactus::ecs {
 
-export using Entity = size_t;
+export using Entity = tuplet::tuple<size_t, size_t>;
 
 } // namespace cactus::ecs

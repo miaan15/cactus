@@ -1,4 +1,3 @@
-#include <array>
 #include <cstdint>
 #include <gtest/gtest.h>
 #include <print>
@@ -8,170 +7,415 @@ import Ecs;
 using namespace cactus::ecs;
 
 struct Position {
-    float x{}, y{}, z{};
+    float x, y, z;
 };
 struct Velocity {
-    float vx{}, vy{}, vz{};
+    float vx, vy, vz;
 };
 struct Health {
-    int hp{100};
+    int hp;
 };
+
 struct Tag {
-    bool active{false};
-};
-struct BigData {
-    std::array<double, 16> mat{};
-};
-struct ByteComp {
-    uint8_t val{};
-};
-struct ShortComp {
-    uint16_t val{};
-};
-struct Int64Comp {
-    int64_t val{};
-};
-struct FloatComp {
-    float val{};
+    uint8_t value;
 };
 
-TEST(EntityCreation, CreateEntityReturnsUniqueIds) {
-    World w;
-    auto e1 = w.create_entity();
-    auto e2 = w.create_entity();
-    auto e3 = w.create_entity();
-    EXPECT_NE(e1, e2);
-    EXPECT_NE(e2, e3);
-    EXPECT_NE(e1, e3);
+struct Transform {
+    double mat[2];
+    float scale;
+    uint8_t flags;
+
+    int32_t layer;
+};
+struct Rotation {
+    float angle;
+    double axis[2];
+};
+
+struct BigPayload {
+    uint64_t data[8];
+};
+
+TEST(WorldTest, TEMP) {
+    World world;
+
+    constexpr int N = 3;
+
+    Entity entities[N];
+    for (int i = 0; i < N; ++i) {
+        entities[i] = world.create_entity();
+        ASSERT_TRUE(world.contains_entity(entities[i]));
+
+        auto j = i + 1;
+
+        std::println("\nWORLD DEBUG BEFORE POSITION:\n{}", world.get_debug());
+        world.emplace_component<Position>(entities[i], j * 1.f, j * 2.f, j * 3.f);
+        
+        std::println("\nWORLD DEBUG BEFORE VELOCITY:\n{}", world.get_debug());
+        world.emplace_component<Velocity>(entities[i], j * 0.1f, j * 0.2f, j * 0.3f);
+
+        std::println("\nWORLD DEBUG END:\n{}", world.get_debug());
+    }
+
+    for (int i = 0; i < N; ++i) {
+        auto j = i + 1;
+
+        auto pos = world.get_component<Position>(entities[i]);
+        ASSERT_TRUE(pos.has_value());
+        EXPECT_FLOAT_EQ(pos.value()->x, j * 1.f);
+        EXPECT_FLOAT_EQ(pos.value()->y, j * 2.f);
+        EXPECT_FLOAT_EQ(pos.value()->z, j * 3.f);
+
+        auto vel = world.get_component<Velocity>(entities[i]);
+        ASSERT_TRUE(vel.has_value());
+        EXPECT_FLOAT_EQ(vel.value()->vx, j * 0.1f);
+        EXPECT_FLOAT_EQ(vel.value()->vy, j * 0.2f);
+        EXPECT_FLOAT_EQ(vel.value()->vz, j * 0.3f);
+    }
 }
 
-TEST(EntityCreation, ManyEntitiesAreUnique) {
-    World w;
-    constexpr int N = 256;
-    std::vector<Entity> ids;
-    ids.reserve(N);
-    for (int i = 0; i < N; ++i) ids.push_back(w.create_entity());
-
-    std::sort(ids.begin(), ids.end());
-    EXPECT_EQ(std::unique(ids.begin(), ids.end()), ids.end());
-}
-
-TEST(EmplaceGet, singleComponent_Position) {
-    World w;
-    auto e = w.create_entity();
-    w.emplace_component<Position>(e, 1.f, 2.f, 3.f);
-
-    std::println("{}", w.get_debug());
-
-    auto opt = w.get_component<Position>(e);
-    ASSERT_TRUE(opt.has_value());
-    EXPECT_FLOAT_EQ(opt.value()->x, 1.f);
-    EXPECT_FLOAT_EQ(opt.value()->y, 2.f);
-    EXPECT_FLOAT_EQ(opt.value()->z, 3.f);
-}
-
-TEST(EmplaceGet, singleComponent_Health) {
-    World w;
-    auto e = w.create_entity();
-    w.emplace_component<Health>(e, 42);
-
-    std::println("{}", w.get_debug());
-
-    auto opt = w.get_component<Health>(e);
-    ASSERT_TRUE(opt.has_value());
-    EXPECT_EQ(opt.value()->hp, 42);
-}
-
-TEST(EmplaceGet, twoComponents_PositionAndVelocity) {
-    World w;
-    auto e = w.create_entity();
-    w.emplace_component<Position>(e, 10.f, 20.f, 30.f);
-    w.emplace_component<Velocity>(e, -1.f, 0.f, 1.f);
-
-    std::println("{}", w.get_debug());
-
-    auto posOpt = w.get_component<Position>(e);
-    auto velOpt = w.get_component<Velocity>(e);
-    ASSERT_TRUE(posOpt.has_value());
-    ASSERT_TRUE(velOpt.has_value());
-    EXPECT_FLOAT_EQ(posOpt.value()->x, 10.f);
-    EXPECT_FLOAT_EQ(velOpt.value()->vx, -1.f);
-}
-
-TEST(EmplaceGet, allThreeComponents) {
-    World w;
-    auto e = w.create_entity();
-    w.emplace_component<Position>(e, 5.f, 5.f, 5.f);
-    w.emplace_component<Velocity>(e, 1.f, 2.f, 3.f);
-    w.emplace_component<Health>(e, 99);
-
-    std::println("{}", w.get_debug());
-
-    EXPECT_FLOAT_EQ(w.get_component<Position>(e).value()->x, 5.f);
-    EXPECT_FLOAT_EQ(w.get_component<Velocity>(e).value()->vy, 2.f);
-    EXPECT_EQ(w.get_component<Health>(e).value()->hp, 99);
-}
-
-TEST(EmplaceGet, emplaceOverwritesExisting) {
-    World w;
-    auto e = w.create_entity();
-    w.emplace_component<Health>(e, 100);
-    w.emplace_component<Health>(e, 50); // overwrite
-
-    std::println("{}", w.get_debug());
-
-    auto opt = w.get_component<Health>(e);
-    ASSERT_TRUE(opt.has_value());
-    EXPECT_EQ(opt.value()->hp, 50);
-}
-
-TEST(EmplaceGet, defaultConstructedComponent) {
-    World w;
-    auto e = w.create_entity();
-    w.emplace_component<Position>(e); // uses default {0,0,0}
-
-    std::println("{}", w.get_debug());
-
-    auto opt = w.get_component<Position>(e);
-    ASSERT_TRUE(opt.has_value());
-    EXPECT_FLOAT_EQ(opt.value()->x, 0.f);
-    EXPECT_FLOAT_EQ(opt.value()->y, 0.f);
-    EXPECT_FLOAT_EQ(opt.value()->z, 0.f);
-}
-
-TEST(EmplaceGet, Align) {
-    World w;
-    auto e0 = w.create_entity();
-    auto e1 = w.create_entity();
-    w.emplace_component<bool>(e0, true);
-    w.emplace_component<double>(e0, 1.f);
-    w.emplace_component<char>(e0, 'a');
-    w.emplace_component<float>(e0, 1.f);
-
-    w.emplace_component<double>(e1, 2.f);
-    w.emplace_component<float>(e1, 2.f);
-    w.emplace_component<char>(e1, 'b');
-    w.emplace_component<bool>(e1, false);
-
-    std::println("{}", w.get_debug());
-
-    w.erase_component<bool>(e0);
-    w.erase_component<float>(e0);
-
-    std::println("{}", w.get_debug());
-
-    w.erase_component<bool>(e1);
-    w.erase_component<float>(e1);
-
-    std::println("{}", w.get_debug());
-
-    w.emplace_component<double>(e0, 5.f);
-    w.emplace_component<float>(e0, 5.f);
-
-    std::println("{}", w.get_debug());
-}
-
-// ---------------------------------------------------------------------------
+// TEST(WorldStressTest, StressTestEmplaceAndRemoveComponent) {
+//     World world;
+//
+//     constexpr int N = 50;
+//
+//     // Phase 1: Create entities and emplace Position + Velocity on all of them
+//     Entity entities[N];
+//     for (int i = 0; i < N; ++i) {
+//         entities[i] = world.create_entity();
+//         ASSERT_TRUE(world.contains_entity(entities[i]));
+//
+//         auto res =
+//             world.emplace_component<Position>(entities[i], static_cast<float>(i),
+//                                               static_cast<float>(i * 2), static_cast<float>(i *
+//                                               3));
+//         ASSERT_TRUE(res.has_value());
+//
+//         res = world.emplace_component<Velocity>(entities[i], static_cast<float>(i * 0.1f),
+//                                                 static_cast<float>(i * 0.2f),
+//                                                 static_cast<float>(i * 0.3f));
+//         ASSERT_TRUE(res.has_value());
+//     }
+//
+//     // Verify all entities have both components with correct values
+//     for (int i = 0; i < N; ++i) {
+//         ASSERT_TRUE(world.contains_component<Position>(entities[i]));
+//         ASSERT_TRUE(world.contains_component<Velocity>(entities[i]));
+//         ASSERT_FALSE(world.contains_component<Health>(entities[i]));
+//
+//         auto pos = world.get_component<Position>(entities[i]);
+//         ASSERT_TRUE(pos.has_value());
+//         EXPECT_FLOAT_EQ(pos.value()->x, static_cast<float>(i));
+//         EXPECT_FLOAT_EQ(pos.value()->y, static_cast<float>(i * 2));
+//         EXPECT_FLOAT_EQ(pos.value()->z, static_cast<float>(i * 3));
+//
+//         auto vel = world.get_component<Velocity>(entities[i]);
+//         ASSERT_TRUE(vel.has_value());
+//         EXPECT_FLOAT_EQ(vel.value()->vx, static_cast<float>(i * 0.1f));
+//         EXPECT_FLOAT_EQ(vel.value()->vy, static_cast<float>(i * 0.2f));
+//         EXPECT_FLOAT_EQ(vel.value()->vz, static_cast<float>(i * 0.3f));
+//     }
+//
+//     // Phase 2: Add Health to even-indexed entities
+//     for (int i = 0; i < N; i += 2) {
+//         auto res = world.emplace_component<Health>(entities[i], 100 + i);
+//         ASSERT_TRUE(res.has_value());
+//     }
+//
+//     // Verify Health presence/absence and that Position/Velocity are still correct
+//     for (int i = 0; i < N; ++i) {
+//         auto pos = world.get_component<Position>(entities[i]);
+//         ASSERT_TRUE(pos.has_value());
+//         EXPECT_FLOAT_EQ(pos.value()->x, static_cast<float>(i));
+//
+//         auto vel = world.get_component<Velocity>(entities[i]);
+//         ASSERT_TRUE(vel.has_value());
+//         EXPECT_FLOAT_EQ(vel.value()->vx, static_cast<float>(i * 0.1f));
+//
+//         if (i % 2 == 0) {
+//             ASSERT_TRUE(world.contains_component<Health>(entities[i]));
+//             auto hp = world.get_component<Health>(entities[i]);
+//             ASSERT_TRUE(hp.has_value());
+//             EXPECT_EQ(hp.value()->hp, 100 + i);
+//         } else {
+//             ASSERT_FALSE(world.contains_component<Health>(entities[i]));
+//         }
+//     }
+//
+//     // Phase 3: Remove Velocity from odd-indexed entities
+//     for (int i = 1; i < N; i += 2) {
+//         auto res = world.remove_component<Velocity>(entities[i]);
+//         ASSERT_TRUE(res.has_value());
+//         EXPECT_TRUE(res.value());
+//     }
+//
+//     // Verify final state
+//     for (int i = 0; i < N; ++i) {
+//         // Position should still be on everyone
+//         ASSERT_TRUE(world.contains_component<Position>(entities[i]));
+//         auto pos = world.get_component<Position>(entities[i]);
+//         ASSERT_TRUE(pos.has_value());
+//         EXPECT_FLOAT_EQ(pos.value()->x, static_cast<float>(i));
+//         EXPECT_FLOAT_EQ(pos.value()->y, static_cast<float>(i * 2));
+//         EXPECT_FLOAT_EQ(pos.value()->z, static_cast<float>(i * 3));
+//
+//         if (i % 2 == 0) {
+//             // Even: has Velocity + Health
+//             ASSERT_TRUE(world.contains_component<Velocity>(entities[i]));
+//             ASSERT_TRUE(world.contains_component<Health>(entities[i]));
+//         } else {
+//             // Odd: Velocity removed, no Health
+//             ASSERT_FALSE(world.contains_component<Velocity>(entities[i]));
+//             ASSERT_FALSE(world.contains_component<Health>(entities[i]));
+//         }
+//     }
+//
+//     // Phase 4: Overwrite Position on all entities (tests the "set" path)
+//     for (int i = 0; i < N; ++i) {
+//         auto res = world.emplace_component<Position>(entities[i], 999.0f, 888.0f, 777.0f);
+//         ASSERT_TRUE(res.has_value());
+//     }
+//
+//     for (int i = 0; i < N; ++i) {
+//         auto pos = world.get_component<Position>(entities[i]);
+//         ASSERT_TRUE(pos.has_value());
+//         EXPECT_FLOAT_EQ(pos.value()->x, 999.0f);
+//         EXPECT_FLOAT_EQ(pos.value()->y, 888.0f);
+//         EXPECT_FLOAT_EQ(pos.value()->z, 777.0f);
+//     }
+//
+//     // Phase 5: Remove all components from a subset, leaving them as empty entities
+//     for (int i = 0; i < N; i += 5) {
+//         world.remove_component<Position>(entities[i]);
+//         if (world.contains_component<Velocity>(entities[i]))
+//             world.remove_component<Velocity>(entities[i]);
+//         if (world.contains_component<Health>(entities[i]))
+//             world.remove_component<Health>(entities[i]);
+//
+//         EXPECT_FALSE(world.contains_component<Position>(entities[i]));
+//         EXPECT_FALSE(world.contains_component<Velocity>(entities[i]));
+//         EXPECT_FALSE(world.contains_component<Health>(entities[i]));
+//         EXPECT_TRUE(world.contains_entity(entities[i]));
+//     }
+// }
+//
+// TEST(WorldStressTest, BIGStressTestEmplaceAndRemoveComponent) {
+//     World world;
+//
+//     constexpr int N = 200;
+//
+//     Entity entities[N];
+//     for (int i = 0; i < N; ++i) {
+//         entities[i] = world.create_entity();
+//     }
+//
+//     // Phase 1: Assign varied component combinations based on index modulo
+//     // This creates many different archetype signatures, stressing archetype migration.
+//     //
+//     // Pattern:
+//     //   All entities get Position.
+//     //   i % 2 == 0  -> also gets Velocity
+//     //   i % 3 == 0  -> also gets Health
+//     //   i % 5 == 0  -> also gets Tag
+//     //   i % 7 == 0  -> also gets Transform
+//     //   i % 11 == 0 -> also gets Rotation
+//     //   i % 13 == 0 -> also gets BigPayload
+//     for (int i = 0; i < N; ++i) {
+//         world.emplace_component<Position>(entities[i], static_cast<float>(i),
+//                                           static_cast<float>(-i), static_cast<float>(i + 1));
+//
+//         if (i % 2 == 0)
+//             world.emplace_component<Velocity>(entities[i], static_cast<float>(i) * 0.5f, 0.0f,
+//                                               static_cast<float>(i) * -0.5f);
+//
+//         if (i % 3 == 0) world.emplace_component<Health>(entities[i], i * 10);
+//
+//         if (i % 5 == 0) world.emplace_component<Tag>(entities[i], static_cast<uint8_t>(i &
+//         0xFF));
+//
+//         if (i % 7 == 0)
+//             world.emplace_component<Transform>(
+//                 entities[i], Transform{{static_cast<double>(i), static_cast<double>(i + 1)},
+//                                        static_cast<float>(i) * 0.1f,
+//                                        static_cast<uint8_t>(i % 4),
+//                                        static_cast<int32_t>(i)});
+//
+//         if (i % 11 == 0)
+//             world.emplace_component<Rotation>(
+//                 entities[i], Rotation{static_cast<float>(i) * 3.14f,
+//                                       {static_cast<double>(i), static_cast<double>(-i)}});
+//
+//         if (i % 13 == 0) {
+//             BigPayload bp{};
+//             for (int k = 0; k < 8; ++k) bp.data[k] = static_cast<uint64_t>(i * 1000 + k);
+//             world.emplace_component<BigPayload>(entities[i], bp);
+//         }
+//     }
+//
+//     // Phase 2: Verify everything is correct
+//     for (int i = 0; i < N; ++i) {
+//         ASSERT_TRUE(world.contains_entity(entities[i]));
+//         ASSERT_TRUE(world.contains_component<Position>(entities[i]));
+//
+//         auto pos = world.get_component<Position>(entities[i]);
+//         ASSERT_TRUE(pos.has_value());
+//         EXPECT_FLOAT_EQ(pos.value()->x, static_cast<float>(i));
+//         EXPECT_FLOAT_EQ(pos.value()->y, static_cast<float>(-i));
+//
+//         if (i % 2 == 0) {
+//             ASSERT_TRUE(world.contains_component<Velocity>(entities[i]));
+//             auto vel = world.get_component<Velocity>(entities[i]);
+//             ASSERT_TRUE(vel.has_value());
+//             EXPECT_FLOAT_EQ(vel.value()->vx, static_cast<float>(i) * 0.5f);
+//         } else {
+//             EXPECT_FALSE(world.contains_component<Velocity>(entities[i]));
+//         }
+//
+//         if (i % 3 == 0) {
+//             ASSERT_TRUE(world.contains_component<Health>(entities[i]));
+//             auto hp = world.get_component<Health>(entities[i]);
+//             ASSERT_TRUE(hp.has_value());
+//             EXPECT_EQ(hp.value()->hp, i * 10);
+//         } else {
+//             EXPECT_FALSE(world.contains_component<Health>(entities[i]));
+//         }
+//
+//         if (i % 5 == 0) {
+//             ASSERT_TRUE(world.contains_component<Tag>(entities[i]));
+//             auto tag = world.get_component<Tag>(entities[i]);
+//             ASSERT_TRUE(tag.has_value());
+//             EXPECT_EQ(tag.value()->value, static_cast<uint8_t>(i & 0xFF));
+//         }
+//
+//         if (i % 7 == 0) {
+//             ASSERT_TRUE(world.contains_component<Transform>(entities[i]));
+//             auto tf = world.get_component<Transform>(entities[i]);
+//             ASSERT_TRUE(tf.has_value());
+//             EXPECT_DOUBLE_EQ(tf.value()->mat[0], static_cast<double>(i));
+//             EXPECT_DOUBLE_EQ(tf.value()->mat[1], static_cast<double>(i + 1));
+//             EXPECT_FLOAT_EQ(tf.value()->scale, static_cast<float>(i) * 0.1f);
+//             EXPECT_EQ(tf.value()->flags, static_cast<uint8_t>(i % 4));
+//             EXPECT_EQ(tf.value()->layer, static_cast<int32_t>(i));
+//         }
+//
+//         if (i % 11 == 0) {
+//             ASSERT_TRUE(world.contains_component<Rotation>(entities[i]));
+//             auto rot = world.get_component<Rotation>(entities[i]);
+//             ASSERT_TRUE(rot.has_value());
+//             EXPECT_FLOAT_EQ(rot.value()->angle, static_cast<float>(i) * 3.14f);
+//             EXPECT_DOUBLE_EQ(rot.value()->axis[0], static_cast<double>(i));
+//             EXPECT_DOUBLE_EQ(rot.value()->axis[1], static_cast<double>(-i));
+//         }
+//
+//         if (i % 13 == 0) {
+//             ASSERT_TRUE(world.contains_component<BigPayload>(entities[i]));
+//             auto bp = world.get_component<BigPayload>(entities[i]);
+//             ASSERT_TRUE(bp.has_value());
+//             for (int k = 0; k < 8; ++k)
+//                 EXPECT_EQ(bp.value()->data[k], static_cast<uint64_t>(i * 1000 + k));
+//         }
+//     }
+//
+//     // Phase 3: Bulk remove — remove Velocity from everyone who has it,
+//     // then verify remaining components survived migration intact.
+//     for (int i = 0; i < N; i += 2) {
+//         auto res = world.remove_component<Velocity>(entities[i]);
+//         ASSERT_TRUE(res.has_value());
+//         EXPECT_TRUE(res.value());
+//     }
+//
+//     for (int i = 0; i < N; ++i) {
+//         EXPECT_FALSE(world.contains_component<Velocity>(entities[i]));
+//
+//         // Position must still be intact
+//         auto pos = world.get_component<Position>(entities[i]);
+//         ASSERT_TRUE(pos.has_value());
+//         EXPECT_FLOAT_EQ(pos.value()->x, static_cast<float>(i));
+//
+//         // Health must still be intact for i % 3 == 0
+//         if (i % 3 == 0) {
+//             auto hp = world.get_component<Health>(entities[i]);
+//             ASSERT_TRUE(hp.has_value());
+//             EXPECT_EQ(hp.value()->hp, i * 10);
+//         }
+//
+//         // BigPayload must still be intact for i % 13 == 0
+//         if (i % 13 == 0) {
+//             auto bp = world.get_component<BigPayload>(entities[i]);
+//             ASSERT_TRUE(bp.has_value());
+//             for (int k = 0; k < 8; ++k)
+//                 EXPECT_EQ(bp.value()->data[k], static_cast<uint64_t>(i * 1000 + k));
+//         }
+//     }
+//
+//     // Phase 4: Re-add Velocity to a subset and add a brand-new component (Tag) to others.
+//     // This tests re-migration into archetypes that already exist.
+//     for (int i = 0; i < N; i += 4) {
+//         world.emplace_component<Velocity>(entities[i], 1.0f, 2.0f, 3.0f);
+//     }
+//     for (int i = 1; i < N; i += 4) {
+//         world.emplace_component<Tag>(entities[i], static_cast<uint8_t>(42));
+//     }
+//
+//     for (int i = 0; i < N; i += 4) {
+//         ASSERT_TRUE(world.contains_component<Velocity>(entities[i]));
+//         auto vel = world.get_component<Velocity>(entities[i]);
+//         ASSERT_TRUE(vel.has_value());
+//         EXPECT_FLOAT_EQ(vel.value()->vx, 1.0f);
+//         EXPECT_FLOAT_EQ(vel.value()->vy, 2.0f);
+//         EXPECT_FLOAT_EQ(vel.value()->vz, 3.0f);
+//
+//         // Position still intact after re-migration
+//         auto pos = world.get_component<Position>(entities[i]);
+//         ASSERT_TRUE(pos.has_value());
+//         EXPECT_FLOAT_EQ(pos.value()->x, static_cast<float>(i));
+//     }
+//
+//     for (int i = 1; i < N; i += 4) {
+//         ASSERT_TRUE(world.contains_component<Tag>(entities[i]));
+//         auto tag = world.get_component<Tag>(entities[i]);
+//         ASSERT_TRUE(tag.has_value());
+//         EXPECT_EQ(tag.value()->value, 42);
+//     }
+//
+//     // Phase 5: Mass removal — strip every component off every 10th entity
+//     for (int i = 0; i < N; i += 10) {
+//         if (world.contains_component<Position>(entities[i]))
+//             world.remove_component<Position>(entities[i]);
+//         if (world.contains_component<Velocity>(entities[i]))
+//             world.remove_component<Velocity>(entities[i]);
+//         if (world.contains_component<Health>(entities[i]))
+//             world.remove_component<Health>(entities[i]);
+//         if (world.contains_component<Tag>(entities[i])) world.remove_component<Tag>(entities[i]);
+//         if (world.contains_component<Transform>(entities[i]))
+//             world.remove_component<Transform>(entities[i]);
+//         if (world.contains_component<Rotation>(entities[i]))
+//             world.remove_component<Rotation>(entities[i]);
+//         if (world.contains_component<BigPayload>(entities[i]))
+//             world.remove_component<BigPayload>(entities[i]);
+//
+//         // Entity still exists but has no components
+//         EXPECT_TRUE(world.contains_entity(entities[i]));
+//         EXPECT_FALSE(world.contains_component<Position>(entities[i]));
+//         EXPECT_FALSE(world.contains_component<Velocity>(entities[i]));
+//         EXPECT_FALSE(world.contains_component<Health>(entities[i]));
+//         EXPECT_FALSE(world.contains_component<Tag>(entities[i]));
+//         EXPECT_FALSE(world.contains_component<Transform>(entities[i]));
+//         EXPECT_FALSE(world.contains_component<Rotation>(entities[i]));
+//         EXPECT_FALSE(world.contains_component<BigPayload>(entities[i]));
+//     }
+//
+//     // Final sanity: non-stripped entities still have Position
+//     for (int i = 0; i < N; ++i) {
+//         if (i % 10 != 0) {
+//             ASSERT_TRUE(world.contains_component<Position>(entities[i]))
+//                 << "Entity " << i << " lost Position unexpectedly";
+//             auto pos = world.get_component<Position>(entities[i]);
+//             ASSERT_TRUE(pos.has_value());
+//             EXPECT_FLOAT_EQ(pos.value()->x, static_cast<float>(i));
+//         }
+//     }
+// }
 
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);

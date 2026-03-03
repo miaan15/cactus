@@ -1,302 +1,745 @@
+#include <algorithm>
 #include <gtest/gtest.h>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
 import SlotMap;
 
-using namespace cactus;
+using IntSlotMap = cactus::SlotMap<int>;
+using StringSlotMap = cactus::SlotMap<std::string>;
 
-// ---------------------------------------------------------------------------
-// Key helpers
-// ---------------------------------------------------------------------------
+// ============================================================================
+// Construction & Initial State
+// ============================================================================
 
-TEST(SlotMapKeyHelpers, GetIdx_ReturnsUpperBits) {
-    uint64_t key = (uint64_t{5} << 32) | 3;
-    EXPECT_EQ(get_idx(key), 5u);
+TEST(SlotMapConstruction, DefaultConstructedIsEmpty) {
+    IntSlotMap sm{};
+    EXPECT_TRUE(sm.empty());
+    EXPECT_EQ(sm.size(), 0u);
 }
 
-TEST(SlotMapKeyHelpers, GetGen_ReturnsLowerBits) {
-    uint64_t key = (uint64_t{5} << 32) | 3;
-    EXPECT_EQ(get_gen(key), 3u);
+TEST(SlotMapConstruction, BeginEqualsEndWhenEmpty) {
+    IntSlotMap sm{};
+    EXPECT_EQ(sm.begin(), sm.end());
+    EXPECT_EQ(sm.cbegin(), sm.cend());
+    EXPECT_EQ(sm.rbegin(), sm.rend());
+    EXPECT_EQ(sm.crbegin(), sm.crend());
 }
 
-TEST(SlotMapKeyHelpers, SetIdx_UpdatesUpperBitsOnly) {
-    uint64_t key = (uint64_t{1} << 32) | 7;
-    set_idx(&key, 99u);
-    EXPECT_EQ(get_idx(key), 99u);
-    EXPECT_EQ(get_gen(key), 7u); // generation preserved
-}
-
-TEST(SlotMapKeyHelpers, IncreaseGen_IncrementsGenerationOnly) {
-    uint64_t key = (uint64_t{4} << 32) | 2;
-    increase_gen(&key);
-    EXPECT_EQ(get_gen(key), 3u);
-    EXPECT_EQ(get_idx(key), 4u); // index preserved
-}
-
-// ---------------------------------------------------------------------------
+// ============================================================================
 // Insert / Emplace
-// ---------------------------------------------------------------------------
+// ============================================================================
 
-TEST(SlotMap, Insert_SingleElement_ReturnsValidKey) {
-    SlotMap<int> sm;
-    auto key = sm.insert(42);
-    EXPECT_EQ(get_idx(key), 0u);
-    EXPECT_EQ(get_gen(key), 0u);
+TEST(SlotMapInsert, InsertLvalue) {
+    IntSlotMap sm{};
+    int val = 42;
+    auto key = sm.insert(val);
+
     EXPECT_EQ(sm.size(), 1u);
+    EXPECT_FALSE(sm.empty());
+    EXPECT_EQ(sm[key], 42);
 }
 
-TEST(SlotMap, Insert_MultipleElements_SizeGrowsAccordingly) {
-    SlotMap<int> sm;
-    sm.insert(1);
-    sm.insert(2);
-    sm.insert(3);
-    EXPECT_EQ(sm.size(), 3u);
+TEST(SlotMapInsert, InsertRvalue) {
+    IntSlotMap sm{};
+    auto key = sm.insert(99);
+
+    EXPECT_EQ(sm.size(), 1u);
+    EXPECT_EQ(sm[key], 99);
 }
 
-TEST(SlotMap, Emplace_WithConstructorArgs_StoresCorrectValue) {
-    SlotMap<std::string> sm;
+TEST(SlotMapInsert, EmplaceConstructsInPlace) {
+    StringSlotMap sm{};
     auto key = sm.emplace("hello");
-    EXPECT_EQ(*sm.at(key).value(), "hello");
+
+    EXPECT_EQ(sm.size(), 1u);
+    EXPECT_EQ(sm[key], "hello");
 }
 
-// ---------------------------------------------------------------------------
-// Find / At / operator[]
-// ---------------------------------------------------------------------------
+TEST(SlotMapInsert, MultipleInserts) {
+    IntSlotMap sm{};
+    auto k0 = sm.insert(10);
+    auto k1 = sm.insert(20);
+    auto k2 = sm.insert(30);
 
-TEST(SlotMap, Find_ValidKey_ReturnsCorrectIterator) {
-    SlotMap<int> sm;
-    auto key = sm.insert(7);
+    EXPECT_EQ(sm.size(), 3u);
+    EXPECT_EQ(sm[k0], 10);
+    EXPECT_EQ(sm[k1], 20);
+    EXPECT_EQ(sm[k2], 30);
+}
+
+TEST(SlotMapInsert, KeysHaveDistinctIndices) {
+    IntSlotMap sm{};
+    auto k0 = sm.insert(1);
+    auto k1 = sm.insert(2);
+    auto k2 = sm.insert(3);
+
+    // Each key should have a unique slot index
+    EXPECT_NE(k0.index, k1.index);
+    EXPECT_NE(k1.index, k2.index);
+    EXPECT_NE(k0.index, k2.index);
+}
+
+// ============================================================================
+// Find
+// ============================================================================
+
+TEST(SlotMapFind, FindExistingKey) {
+    IntSlotMap sm{};
+    auto key = sm.insert(42);
+
     auto it = sm.find(key);
     ASSERT_NE(it, sm.end());
-    EXPECT_EQ(*it, 7);
+    EXPECT_EQ(*it, 42);
 }
 
-TEST(SlotMap, Find_InvalidKey_ReturnsEnd) {
-    SlotMap<int> sm;
-    sm.insert(1);
-    uint64_t bad_key = (uint64_t{99} << 32) | 0;
+TEST(SlotMapFind, FindNonExistentKeyReturnsEnd) {
+    IntSlotMap sm{};
+    sm.insert(42);
+
+    IntSlotMap::key_type bad_key{999, 0};
     EXPECT_EQ(sm.find(bad_key), sm.end());
 }
 
-TEST(SlotMap, At_ValidKey_ReturnsPointerToValue) {
-    SlotMap<int> sm;
-    auto key = sm.insert(55);
-    auto result = sm.at(key);
-    ASSERT_TRUE(result.has_value());
-    EXPECT_EQ(**result, 55);
-}
-
-TEST(SlotMap, At_InvalidKey_ReturnsEmpty) {
-    SlotMap<int> sm;
-    uint64_t bad_key = (uint64_t{99} << 32) | 0;
-    EXPECT_FALSE(sm.at(bad_key).has_value());
-}
-
-TEST(SlotMap, At_ConstView_ValidKey_ReturnsPointerToValue) {
-    SlotMap<int> sm;
-    auto key = sm.insert(77);
-    const auto &csm = sm;
-    auto result = csm.at(key);
-    ASSERT_TRUE(result.has_value());
-    EXPECT_EQ(**result, 77);
-}
-
-TEST(SlotMap, SubscriptOperator_ValidKey_ReturnsCorrectValue) {
-    SlotMap<int> sm;
-    auto key = sm.insert(33);
-    EXPECT_EQ(sm[key], 33);
-}
-
-// ---------------------------------------------------------------------------
-// Erase (by key)
-// ---------------------------------------------------------------------------
-
-TEST(SlotMap, Erase_ByKey_RemovesElement) {
-    SlotMap<int> sm;
-    auto key = sm.insert(10);
+TEST(SlotMapFind, FindStaleKeyReturnsEnd) {
+    IntSlotMap sm{};
+    auto key = sm.insert(42);
     sm.erase(key);
-    EXPECT_EQ(sm.size(), 0u);
-    EXPECT_FALSE(sm.at(key).has_value());
-}
 
-TEST(SlotMap, Erase_ByKey_InvalidatesKey) {
-    SlotMap<int> sm;
-    auto key = sm.insert(10);
-    sm.erase(key);
-    // generation bumped — stale key should not resolve
+    // key is now stale (generation mismatch)
     EXPECT_EQ(sm.find(key), sm.end());
 }
 
-TEST(SlotMap, Erase_ByKey_StaleKey_ReturnsEnd) {
-    SlotMap<int> sm;
-    auto key = sm.insert(1);
+TEST(SlotMapFind, ConstFind) {
+    IntSlotMap sm{};
+    auto key = sm.insert(42);
+
+    const auto &csm = sm;
+    auto it = csm.find(key);
+    ASSERT_NE(it, csm.end());
+    EXPECT_EQ(*it, 42);
+}
+
+// ============================================================================
+// at()
+// ============================================================================
+
+TEST(SlotMapAt, AtReturnsReferenceForValidKey) {
+    IntSlotMap sm{};
+    auto key = sm.insert(42);
+
+    EXPECT_EQ(sm.at(key), 42);
+}
+
+TEST(SlotMapAt, AtThrowsForInvalidKey) {
+    IntSlotMap sm{};
+    IntSlotMap::key_type bad_key{999, 0};
+
+    EXPECT_THROW(sm.at(bad_key), std::out_of_range);
+}
+
+TEST(SlotMapAt, AtThrowsForStaleKey) {
+    IntSlotMap sm{};
+    auto key = sm.insert(42);
     sm.erase(key);
-    auto result = sm.erase(key); // second erase with stale key
-    EXPECT_EQ(result, sm.end());
+
+    EXPECT_THROW(sm.at(key), std::out_of_range);
 }
 
-TEST(SlotMap, Erase_ByKey_PreservesOtherElements) {
-    SlotMap<int> sm;
-    auto k1 = sm.insert(1);
-    auto k2 = sm.insert(2);
-    auto k3 = sm.insert(3);
-    sm.erase(k2);
-    EXPECT_TRUE(sm.at(k1).has_value());
-    EXPECT_FALSE(sm.at(k2).has_value());
-    EXPECT_TRUE(sm.at(k3).has_value());
+TEST(SlotMapAt, AtIsMutable) {
+    IntSlotMap sm{};
+    auto key = sm.insert(42);
+
+    sm.at(key) = 100;
+    EXPECT_EQ(sm.at(key), 100);
 }
 
-// ---------------------------------------------------------------------------
-// Slot reuse after erase
-// ---------------------------------------------------------------------------
+TEST(SlotMapAt, ConstAtReturnsConstReference) {
+    IntSlotMap sm{};
+    auto key = sm.insert(42);
 
-TEST(SlotMap, Insert_AfterErase_ReusesFreeSlot) {
-    SlotMap<int> sm;
-    auto k1 = sm.insert(1);
-    sm.erase(k1);
-    auto k2 = sm.insert(2);
-
-    // slot index should be reused, but generation must differ
-    EXPECT_EQ(get_idx(k1), get_idx(k2));
-    EXPECT_NE(get_gen(k1), get_gen(k2));
-    EXPECT_EQ(sm[k2], 2);
+    const auto &csm = sm;
+    EXPECT_EQ(csm.at(key), 42);
 }
 
-TEST(SlotMap, Insert_AfterErase_OldKeyStillInvalid) {
-    SlotMap<int> sm;
-    auto old_key = sm.insert(42);
-    sm.erase(old_key);
-    sm.insert(99); // reuses same slot
+TEST(SlotMapAt, ConstAtThrowsForInvalidKey) {
+    IntSlotMap sm{};
+    const auto &csm = sm;
 
-    EXPECT_FALSE(sm.at(old_key).has_value());
+    IntSlotMap::key_type bad_key{999, 0};
+    EXPECT_THROW(csm.at(bad_key), std::out_of_range);
 }
 
-// ---------------------------------------------------------------------------
-// Erase (by iterator range)
-// ---------------------------------------------------------------------------
+// ============================================================================
+// get() (optional-based access)
+// ============================================================================
 
-TEST(SlotMap, Erase_IteratorRange_RemovesAllInRange) {
-    SlotMap<int> sm;
-    sm.insert(1);
-    sm.insert(2);
-    sm.insert(3);
-    sm.erase(sm.begin(), sm.end());
+TEST(SlotMapGet, GetReturnsPointerForValidKey) {
+    IntSlotMap sm{};
+    auto key = sm.insert(42);
+
+    auto result = sm.get(key);
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(**result, 42);
+}
+
+TEST(SlotMapGet, GetReturnsNulloptForInvalidKey) {
+    IntSlotMap sm{};
+    IntSlotMap::key_type bad_key{999, 0};
+
+    EXPECT_FALSE(sm.get(bad_key).has_value());
+}
+
+TEST(SlotMapGet, GetReturnsNulloptForStaleKey) {
+    IntSlotMap sm{};
+    auto key = sm.insert(42);
+    sm.erase(key);
+
+    EXPECT_FALSE(sm.get(key).has_value());
+}
+
+TEST(SlotMapGet, ConstGetReturnsConstPointer) {
+    IntSlotMap sm{};
+    auto key = sm.insert(42);
+
+    const auto &csm = sm;
+    auto result = csm.get(key);
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(**result, 42);
+}
+
+// ============================================================================
+// operator[]
+// ============================================================================
+
+TEST(SlotMapSubscript, ReturnsCorrectValue) {
+    IntSlotMap sm{};
+    auto key = sm.insert(42);
+    EXPECT_EQ(sm[key], 42);
+}
+
+TEST(SlotMapSubscript, IsMutable) {
+    IntSlotMap sm{};
+    auto key = sm.insert(42);
+
+    sm[key] = 100;
+    EXPECT_EQ(sm[key], 100);
+}
+
+TEST(SlotMapSubscript, ConstSubscript) {
+    IntSlotMap sm{};
+    auto key = sm.insert(42);
+
+    const auto &csm = sm;
+    EXPECT_EQ(csm[key], 42);
+}
+
+// ============================================================================
+// contains()
+// ============================================================================
+
+TEST(SlotMapContains, ReturnsTrueForValidKey) {
+    IntSlotMap sm{};
+    auto key = sm.insert(42);
+    EXPECT_TRUE(sm.contains(key));
+}
+
+TEST(SlotMapContains, ReturnsFalseForInvalidKey) {
+    IntSlotMap sm{};
+    IntSlotMap::key_type bad_key{999, 0};
+    EXPECT_FALSE(sm.contains(bad_key));
+}
+
+TEST(SlotMapContains, ReturnsFalseForStaleKey) {
+    IntSlotMap sm{};
+    auto key = sm.insert(42);
+    sm.erase(key);
+    EXPECT_FALSE(sm.contains(key));
+}
+
+TEST(SlotMapContains, ReturnsFalseOnEmptyMap) {
+    IntSlotMap sm{};
+    IntSlotMap::key_type key{0, 0};
+    EXPECT_FALSE(sm.contains(key));
+}
+
+// ============================================================================
+// Erase by key
+// ============================================================================
+
+TEST(SlotMapErase, EraseByKeyRemovesElement) {
+    IntSlotMap sm{};
+    auto key = sm.insert(42);
+
+    sm.erase(key);
+    EXPECT_EQ(sm.size(), 0u);
     EXPECT_TRUE(sm.empty());
 }
 
-// ---------------------------------------------------------------------------
-// Iteration
-// ---------------------------------------------------------------------------
+TEST(SlotMapErase, EraseByKeyInvalidatesKey) {
+    IntSlotMap sm{};
+    auto key = sm.insert(42);
 
-TEST(SlotMap, Iterator_ForwardIteration_VisitsAllLiveElements) {
-    SlotMap<int> sm;
+    sm.erase(key);
+    EXPECT_FALSE(sm.contains(key));
+    EXPECT_EQ(sm.find(key), sm.end());
+}
+
+TEST(SlotMapErase, EraseByInvalidKeyReturnsEnd) {
+    IntSlotMap sm{};
+    sm.insert(42);
+
+    IntSlotMap::key_type bad_key{999, 0};
+    EXPECT_EQ(sm.erase(bad_key), sm.end());
+    EXPECT_EQ(sm.size(), 1u);
+}
+
+TEST(SlotMapErase, EraseMiddleElementPreservesOthers) {
+    IntSlotMap sm{};
+    auto k0 = sm.insert(10);
+    auto k1 = sm.insert(20);
+    auto k2 = sm.insert(30);
+
+    sm.erase(k1);
+
+    EXPECT_EQ(sm.size(), 2u);
+    EXPECT_EQ(sm[k0], 10);
+    EXPECT_FALSE(sm.contains(k1));
+    EXPECT_EQ(sm[k2], 30);
+}
+
+TEST(SlotMapErase, EraseFirstElementPreservesOthers) {
+    IntSlotMap sm{};
+    auto k0 = sm.insert(10);
+    auto k1 = sm.insert(20);
+    auto k2 = sm.insert(30);
+
+    sm.erase(k0);
+
+    EXPECT_EQ(sm.size(), 2u);
+    EXPECT_FALSE(sm.contains(k0));
+    EXPECT_EQ(sm[k1], 20);
+    EXPECT_EQ(sm[k2], 30);
+}
+
+TEST(SlotMapErase, EraseLastElementPreservesOthers) {
+    IntSlotMap sm{};
+    auto k0 = sm.insert(10);
+    auto k1 = sm.insert(20);
+    auto k2 = sm.insert(30);
+
+    sm.erase(k2);
+
+    EXPECT_EQ(sm.size(), 2u);
+    EXPECT_EQ(sm[k0], 10);
+    EXPECT_EQ(sm[k1], 20);
+    EXPECT_FALSE(sm.contains(k2));
+}
+
+// ============================================================================
+// Erase by iterator
+// ============================================================================
+
+TEST(SlotMapEraseIter, EraseSingleByIterator) {
+    IntSlotMap sm{};
+    sm.insert(42);
+
+    auto it = sm.begin();
+    sm.erase(it);
+    EXPECT_TRUE(sm.empty());
+}
+
+TEST(SlotMapEraseIter, EraseReturnsValidIterator) {
+    IntSlotMap sm{};
     sm.insert(10);
     sm.insert(20);
     sm.insert(30);
 
-    std::vector<int> result(sm.begin(), sm.end());
-    std::sort(result.begin(), result.end());
-    EXPECT_EQ(result, (std::vector<int>{10, 20, 30}));
+    auto it = sm.erase(sm.begin());
+    // Returned iterator should be valid (either pointing to an element or end)
+    EXPECT_EQ(sm.size(), 2u);
+    if (it != sm.end()) {
+        // The value at the iterator should be one of the remaining values
+        EXPECT_TRUE(*it == 10 || *it == 20 || *it == 30);
+    }
 }
 
-TEST(SlotMap, Iterator_EmptyContainer_BeginEqualsEnd) {
-    SlotMap<int> sm;
-    EXPECT_EQ(sm.begin(), sm.end());
-}
+// ============================================================================
+// Erase by iterator range
+// ============================================================================
 
-TEST(SlotMap, ReverseIterator_ReturnsElementsInReverseOrder) {
-    SlotMap<int> sm;
-    sm.insert(1);
-    sm.insert(2);
-    sm.insert(3);
+TEST(SlotMapEraseRange, EraseAll) {
+    IntSlotMap sm{};
+    sm.insert(10);
+    sm.insert(20);
+    sm.insert(30);
 
-    std::vector<int> result(sm.rbegin(), sm.rend());
-    EXPECT_EQ(result, (std::vector<int>{3, 2, 1}));
-}
-
-// ---------------------------------------------------------------------------
-// Size / Empty / Capacity / Reserve
-// ---------------------------------------------------------------------------
-
-TEST(SlotMap, Empty_NewContainer_ReturnsTrue) {
-    SlotMap<int> sm;
+    sm.erase(sm.begin(), sm.end());
     EXPECT_TRUE(sm.empty());
+    EXPECT_EQ(sm.size(), 0u);
 }
 
-TEST(SlotMap, Empty_AfterInsert_ReturnsFalse) {
-    SlotMap<int> sm;
-    sm.insert(1);
-    EXPECT_FALSE(sm.empty());
+TEST(SlotMapEraseRange, EraseEmptyRange) {
+    IntSlotMap sm{};
+    sm.insert(10);
+    sm.insert(20);
+
+    sm.erase(sm.begin(), sm.begin());
+    EXPECT_EQ(sm.size(), 2u);
 }
 
-TEST(SlotMap, Empty_AfterInsertAndErase_ReturnsTrue) {
-    SlotMap<int> sm;
-    auto key = sm.insert(1);
-    sm.erase(key);
-    EXPECT_TRUE(sm.empty());
+// ============================================================================
+// Slot reuse after erase
+// ============================================================================
+
+TEST(SlotMapSlotReuse, ReusesSlotAfterErase) {
+    IntSlotMap sm{};
+    auto k0 = sm.insert(10);
+    sm.erase(k0);
+
+    auto k1 = sm.insert(20);
+
+    // The slot index should be reused
+    EXPECT_EQ(k1.index, k0.index);
+    // But the generation should have advanced
+    EXPECT_NE(k1.gen, k0.gen);
+
+    EXPECT_EQ(sm[k1], 20);
+    EXPECT_FALSE(sm.contains(k0));
 }
 
-TEST(SlotMap, Reserve_SetsCapacityAtLeastToRequestedSize) {
-    SlotMap<int> sm;
-    sm.reserve(64u);
-    EXPECT_GE(sm.capacity(), 64u);
+TEST(SlotMapSlotReuse, MultipleReuses) {
+    IntSlotMap sm{};
+    auto k0 = sm.insert(100);
+    sm.erase(k0);
+
+    auto k1 = sm.insert(200);
+    sm.erase(k1);
+
+    auto k2 = sm.insert(300);
+
+    EXPECT_EQ(k2.index, k0.index);
+    EXPECT_EQ(sm[k2], 300);
+    EXPECT_FALSE(sm.contains(k0));
+    EXPECT_FALSE(sm.contains(k1));
 }
 
-// ---------------------------------------------------------------------------
-// Clear
-// ---------------------------------------------------------------------------
+// ============================================================================
+// Iterators
+// ============================================================================
 
-TEST(SlotMap, Clear_NonEmptyContainer_BecomesEmpty) {
-    SlotMap<int> sm;
-    sm.insert(1);
-    sm.insert(2);
+TEST(SlotMapIterators, ForwardIteration) {
+    IntSlotMap sm{};
+    sm.insert(10);
+    sm.insert(20);
+    sm.insert(30);
+
+    std::vector<int> values(sm.begin(), sm.end());
+    std::sort(values.begin(), values.end());
+
+    EXPECT_EQ(values, (std::vector<int>{10, 20, 30}));
+}
+
+TEST(SlotMapIterators, ConstForwardIteration) {
+    IntSlotMap sm{};
+    sm.insert(10);
+    sm.insert(20);
+
+    const auto &csm = sm;
+    std::vector<int> values(csm.begin(), csm.end());
+    std::sort(values.begin(), values.end());
+
+    EXPECT_EQ(values, (std::vector<int>{10, 20}));
+}
+
+TEST(SlotMapIterators, CBeginCEnd) {
+    IntSlotMap sm{};
+    sm.insert(10);
+    sm.insert(20);
+
+    std::vector<int> values(sm.cbegin(), sm.cend());
+    std::sort(values.begin(), values.end());
+
+    EXPECT_EQ(values, (std::vector<int>{10, 20}));
+}
+
+TEST(SlotMapIterators, ReverseIteration) {
+    IntSlotMap sm{};
+    sm.insert(10);
+    sm.insert(20);
+    sm.insert(30);
+
+    std::vector<int> values(sm.rbegin(), sm.rend());
+    // Reverse of the data order
+    std::vector<int> forward_values(sm.begin(), sm.end());
+    std::reverse(forward_values.begin(), forward_values.end());
+
+    EXPECT_EQ(values, forward_values);
+}
+
+TEST(SlotMapIterators, ConstReverseIteration) {
+    IntSlotMap sm{};
+    sm.insert(10);
+    sm.insert(20);
+
+    const auto &csm = sm;
+    std::vector<int> values(csm.rbegin(), csm.rend());
+    EXPECT_EQ(values.size(), 2u);
+}
+
+TEST(SlotMapIterators, CRBeginCREnd) {
+    IntSlotMap sm{};
+    sm.insert(10);
+    sm.insert(20);
+
+    std::vector<int> values(sm.crbegin(), sm.crend());
+    EXPECT_EQ(values.size(), 2u);
+}
+
+TEST(SlotMapIterators, RangeBasedForLoop) {
+    IntSlotMap sm{};
+    sm.insert(10);
+    sm.insert(20);
+    sm.insert(30);
+
+    int sum = 0;
+    for (auto val : sm) {
+        sum += val;
+    }
+    EXPECT_EQ(sum, 60);
+}
+
+TEST(SlotMapIterators, MutateViaIterator) {
+    IntSlotMap sm{};
+    auto key = sm.insert(42);
+
+    *sm.begin() = 100;
+    // Since there's only one element, sm[key] must reflect the change
+    EXPECT_EQ(sm[key], 100);
+}
+
+// ============================================================================
+// clear()
+// ============================================================================
+
+TEST(SlotMapClear, ClearEmptiesTheMap) {
+    IntSlotMap sm{};
+    auto k0 = sm.insert(10);
+    auto k1 = sm.insert(20);
+    auto k2 = sm.insert(30);
+
     sm.clear();
+
     EXPECT_TRUE(sm.empty());
+    EXPECT_EQ(sm.size(), 0u);
     EXPECT_EQ(sm.begin(), sm.end());
+
+    // Old keys should not be found
+    EXPECT_EQ(sm.find(k0), sm.end());
+    EXPECT_EQ(sm.find(k1), sm.end());
+    EXPECT_EQ(sm.find(k2), sm.end());
 }
 
-TEST(SlotMap, Clear_ThenInsert_WorksCorrectly) {
-    SlotMap<int> sm;
-    sm.insert(1);
+TEST(SlotMapClear, InsertAfterClearWorks) {
+    IntSlotMap sm{};
+    sm.insert(10);
     sm.clear();
+
     auto key = sm.insert(99);
+    EXPECT_EQ(sm.size(), 1u);
     EXPECT_EQ(sm[key], 99);
+}
+
+// ============================================================================
+// reserve()
+// ============================================================================
+
+TEST(SlotMapReserve, ReserveIncreasesCapacity) {
+    IntSlotMap sm{};
+    sm.reserve(100);
+
+    EXPECT_GE(sm.capacity(), 100u);
+    EXPECT_TRUE(sm.empty());
+}
+
+TEST(SlotMapReserve, ReserveDoesNotChangeSize) {
+    IntSlotMap sm{};
+    sm.insert(10);
+    sm.reserve(100);
+
     EXPECT_EQ(sm.size(), 1u);
 }
 
-// ---------------------------------------------------------------------------
-// Swap
-// ---------------------------------------------------------------------------
+// ============================================================================
+// Size / Empty / Capacity
+// ============================================================================
 
-TEST(SlotMap, Swap_MemberFunction_ExchangesContents) {
-    SlotMap<int> a, b;
-    auto ka = a.insert(1);
-    b.insert(10);
-    b.insert(20);
-
-    a.swap(b);
-
-    EXPECT_EQ(a.size(), 2u);
-    EXPECT_EQ(b.size(), 1u);
-    EXPECT_EQ(b[ka], 1);
+TEST(SlotMapSizeEmpty, EmptyOnConstruction) {
+    IntSlotMap sm{};
+    EXPECT_TRUE(sm.empty());
+    EXPECT_EQ(sm.size(), 0u);
 }
 
-TEST(SlotMap, Swap_FreeFunction_ExchangesContents) {
-    SlotMap<int> a, b;
-    auto ka = a.insert(42);
-    b.insert(7);
-
-    swap(a, b);
-
-    EXPECT_EQ(a.size(), 1u);
-    EXPECT_EQ(a[ka], 7); // ka's slot index reused in a, value now 7...
-    // verify via size and direct lookup on b
-    EXPECT_EQ(b.size(), 1u);
-    EXPECT_EQ(b[ka], 42);
+TEST(SlotMapSizeEmpty, NotEmptyAfterInsert) {
+    IntSlotMap sm{};
+    sm.insert(42);
+    EXPECT_FALSE(sm.empty());
+    EXPECT_EQ(sm.size(), 1u);
 }
 
-// ---------------------------------------------------------------------------
+TEST(SlotMapSizeEmpty, SizeTracksInsertAndErase) {
+    IntSlotMap sm{};
+    auto k0 = sm.insert(10);
+    auto k1 = sm.insert(20);
+    EXPECT_EQ(sm.size(), 2u);
+
+    sm.erase(k0);
+    EXPECT_EQ(sm.size(), 1u);
+
+    sm.erase(k1);
+    EXPECT_EQ(sm.size(), 0u);
+    EXPECT_TRUE(sm.empty());
+}
+
+TEST(SlotMapSizeEmpty, CapacityIsAtLeastSize) {
+    IntSlotMap sm{};
+    for (int i = 0; i < 50; ++i) {
+        sm.insert(i);
+    }
+    EXPECT_GE(sm.capacity(), sm.size());
+}
+
+// ============================================================================
+// Stress / Complex Scenarios
+// ============================================================================
+
+TEST(SlotMapStress, InsertEraseInsertCycle) {
+    IntSlotMap sm{};
+    std::vector<IntSlotMap::key_type> keys;
+
+    // Insert 100 elements
+    for (int i = 0; i < 100; ++i) {
+        keys.push_back(sm.insert(i));
+    }
+    EXPECT_EQ(sm.size(), 100u);
+
+    // Erase every other element
+    for (int i = 0; i < 100; i += 2) {
+        sm.erase(keys[i]);
+    }
+    EXPECT_EQ(sm.size(), 50u);
+
+    // Verify remaining elements are accessible
+    for (int i = 1; i < 100; i += 2) {
+        EXPECT_TRUE(sm.contains(keys[i]));
+        EXPECT_EQ(sm[keys[i]], i);
+    }
+
+    // Verify erased elements are gone
+    for (int i = 0; i < 100; i += 2) {
+        EXPECT_FALSE(sm.contains(keys[i]));
+    }
+
+    // Insert 50 more elements (should reuse slots)
+    for (int i = 100; i < 150; ++i) {
+        auto key = sm.insert(i);
+        EXPECT_TRUE(sm.contains(key));
+        EXPECT_EQ(sm[key], i);
+    }
+    EXPECT_EQ(sm.size(), 100u);
+}
+
+TEST(SlotMapStress, EraseAllThenRefill) {
+    IntSlotMap sm{};
+    std::vector<IntSlotMap::key_type> keys;
+
+    for (int i = 0; i < 50; ++i) {
+        keys.push_back(sm.insert(i));
+    }
+
+    // Erase all
+    for (auto &key : keys) {
+        sm.erase(key);
+    }
+    EXPECT_TRUE(sm.empty());
+
+    // None of the old keys should work
+    for (auto &key : keys) {
+        EXPECT_FALSE(sm.contains(key));
+    }
+
+    // Re-insert
+    std::vector<IntSlotMap::key_type> new_keys;
+    for (int i = 0; i < 50; ++i) {
+        new_keys.push_back(sm.insert(i + 1000));
+    }
+    EXPECT_EQ(sm.size(), 50u);
+
+    for (int i = 0; i < 50; ++i) {
+        EXPECT_EQ(sm[new_keys[i]], i + 1000);
+    }
+}
+
+TEST(SlotMapStress, DataContiguityAfterErases) {
+    IntSlotMap sm{};
+    auto k0 = sm.insert(10);
+    auto k1 = sm.insert(20);
+    auto k2 = sm.insert(30);
+    auto k3 = sm.insert(40);
+    auto k4 = sm.insert(50);
+
+    sm.erase(k1);
+    sm.erase(k3);
+
+    // Data should still be contiguous and iterable
+    EXPECT_EQ(sm.size(), 3u);
+
+    std::vector<int> values(sm.begin(), sm.end());
+    std::sort(values.begin(), values.end());
+    EXPECT_EQ(values, (std::vector<int>{10, 30, 50}));
+
+    // Remaining keys still valid
+    EXPECT_EQ(sm[k0], 10);
+    EXPECT_EQ(sm[k2], 30);
+    EXPECT_EQ(sm[k4], 50);
+}
+
+// ============================================================================
+// String type (non-trivial value_type)
+// ============================================================================
+
+TEST(SlotMapString, InsertAndRetrieve) {
+    StringSlotMap sm{};
+    auto key = sm.emplace("hello world");
+
+    EXPECT_EQ(sm[key], "hello world");
+    EXPECT_EQ(sm.at(key), "hello world");
+}
+
+TEST(SlotMapString, EraseAndReinnsert) {
+    StringSlotMap sm{};
+    auto k0 = sm.emplace("alpha");
+    auto k1 = sm.emplace("beta");
+
+    sm.erase(k0);
+    EXPECT_FALSE(sm.contains(k0));
+    EXPECT_EQ(sm[k1], "beta");
+
+    auto k2 = sm.emplace("gamma");
+    EXPECT_EQ(sm[k2], "gamma");
+    EXPECT_EQ(sm.size(), 2u);
+}
+
+TEST(SlotMapString, MutateViaAt) {
+    StringSlotMap sm{};
+    auto key = sm.emplace("before");
+
+    sm.at(key) = "after";
+    EXPECT_EQ(sm[key], "after");
+}
+
+// ============================================================================
 
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
