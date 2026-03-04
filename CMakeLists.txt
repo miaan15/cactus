@@ -14,10 +14,6 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 option(USE_ASAN "Enable AddressSanitizer" OFF)
-if(USE_ASAN)
-    add_compile_options(-fsanitize=address -fno-omit-frame-pointer -g)
-    add_link_options(-fsanitize=address)
-endif()
 
 if(WIN32)
     message(STATUS "Platform: Windows")
@@ -37,6 +33,12 @@ set(TEST_DIR "${CMAKE_SOURCE_DIR}/test")
 add_subdirectory(${VENDOR_DIR}/sdl)
 add_subdirectory(${VENDOR_DIR}/sdl_image)
 add_subdirectory(${VENDOR_DIR}/sdl_shadercross)
+
+if(USE_ASAN)
+    add_compile_options(-fsanitize=address -fno-omit-frame-pointer -g)
+    add_link_options(-fsanitize=address)
+endif()
+
 add_subdirectory(${VENDOR_DIR}/glm)
 add_subdirectory(${VENDOR_DIR}/boost)
 add_subdirectory(${VENDOR_DIR}/spdlog)

@@ -177,9 +177,9 @@ export struct World {
             return;
         }
 
-        ArchetypeTable &old_archetype_table = archetype_tables.at(signature_id);
         ArchetypeTable &new_archetype_table =
             archetype_tables.try_emplace(new_signature_id).first->second;
+        ArchetypeTable &old_archetype_table = archetype_tables.at(signature_id);
         new_archetype_table.row_size = signature_row_size(new_signature_id);
         new_archetype_table.row_align = signature_row_align(new_signature_id);
 
@@ -268,9 +268,9 @@ export struct World {
             return true;
         }
 
-        ArchetypeTable &old_archetype_table = archetype_tables.at(signature_id);
         ArchetypeTable &new_archetype_table =
             archetype_tables.try_emplace(new_signature_id).first->second;
+        ArchetypeTable &old_archetype_table = archetype_tables.at(signature_id);
         new_archetype_table.row_size = signature_row_size(new_signature_id);
         new_archetype_table.row_align = signature_row_align(new_signature_id);
 
@@ -289,8 +289,10 @@ export struct World {
             auto cur_componet_align = component_atlas.get_component_alignment(cur_component_id);
 
             if (old_signature_data.ptr[i] == component_id) {
-                new_cur_row_offset =
-                    align_up_offset(new_cur_row_offset, component_align) + component_size;
+                old_cur_row_offset =
+                    align_up_offset(old_cur_row_offset, component_align) + component_size;
+
+                continue;
             }
 
             old_cur_row_offset = align_up_offset(old_cur_row_offset, cur_componet_align);
