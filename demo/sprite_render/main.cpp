@@ -11,7 +11,7 @@ import Render;
 using namespace cactus;
 namespace stdf = std::filesystem;
 
-stdf::path cur_dir = cactus::root_dir / "demo/sprite_render_demo";
+stdf::path cur_dir = cactus::root_dir / "demo/sprite_render";
 
 int main(int argc, char *argv[]) {
     if (!SDL_Init(SDL_INIT_VIDEO)) {
