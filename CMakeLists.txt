@@ -88,6 +88,9 @@ set(TEST_LINKS
 
 macro(create_target_demo target exe_source)
     add_executable(${target} ${exe_source})
+    set_target_properties(${target} PROPERTIES 
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/demo"
+    )
     target_sources(${target}
         PRIVATE FILE_SET CXX_MODULES FILES ${MODS}
     )
@@ -97,6 +100,9 @@ endmacro()
 
 macro(create_target_test target exe_source)
     add_executable(${target} ${exe_source})
+    set_target_properties(${target} PROPERTIES 
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/test"
+    )
     target_sources(${target}
         PRIVATE FILE_SET CXX_MODULES FILES ${MODS}
     )
