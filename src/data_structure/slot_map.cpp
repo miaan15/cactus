@@ -56,7 +56,7 @@ struct SlotMap {
     container_type data;
     data_map_container data_map;
     slot_container_type slots;
-    size_type next_slot_index;
+    size_type next_slot_index = 0;
 
     using slot_iterator = typename decltype(slots)::iterator;
 
@@ -284,6 +284,18 @@ struct SlotMap {
     }
     constexpr auto capacity() const -> size_type {
         return data.capacity();
+    }
+
+    constexpr void swap(SlotMap &other) noexcept {
+        using std::swap;
+        swap(data, other.data);
+        swap(data_map, other.data_map);
+        swap(slots, other.slots);
+        swap(next_slot_index, other.next_slot_index);
+    }
+
+    friend constexpr void swap(SlotMap &lhs, SlotMap &rhs) noexcept {
+        lhs.swap(rhs);
     }
 
     constexpr auto slot_iter_from_data_iter(const_iterator data_iter) -> slot_iterator {

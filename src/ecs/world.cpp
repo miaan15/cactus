@@ -2,7 +2,6 @@ module;
 
 #include <cassert>
 #include <cstddef>
-#include <cstdint>
 #include <cstring>
 #include <format>
 #include <optional>
@@ -20,18 +19,9 @@ import SlotMap;
 
 namespace cactus::ecs {
 
-constexpr auto align_up(uintptr_t ptr, size_t alignment) -> uintptr_t {
-    assert(alignment > 0 && (alignment & (alignment - 1)) == 0);
-    return (ptr + alignment - 1) & ~(alignment - 1);
-}
-constexpr auto align_up_offset(void *root_ptr, size_t offset, size_t alignment) -> size_t {
-    uintptr_t ptr = (uintptr_t)root_ptr + offset;
-    return align_up(ptr, alignment) - (uintptr_t)root_ptr;
-}
-
 export struct World {
     struct EntityStatus {
-        SignatureID signature_id;
+        SignatureID signature_id = (SignatureID)-1;
         size_t row;
     };
 
@@ -39,6 +29,18 @@ export struct World {
     bstu::unordered_flat_map<SignatureID, ArchetypeTable> archetype_tables;
     ComponentAtlas component_atlas;
     SignatureAtlas signature_atlas;
+
+    World() = default;
+    World(const World &) = delete;
+    World &operator=(const World &) = delete;
+    World(World &&other) noexcept = delete; // TODO world is moveable
+    World &operator=(World &&other) noexcept = delete;
+    ~World() {
+        for (auto &&[_, table] : archetype_tables) {
+            table.free();
+        }
+        signature_atlas.free();
+    }
 
     // FIXME: DEBUG STUFF
     std::string debug_str;
@@ -141,12 +143,13 @@ export struct World {
         auto signature_id = entities_status[entity].signature_id;
         assert(archetype_tables.contains(signature_id) || signature_id == EMPTY_SIGNATURE_ID);
 
+        // If component existed; just assign
         if (signature_atlas.contains_component(signature_id, component_id)) {
             auto &table = archetype_tables.at(signature_id);
-            const auto column_offset = row_offset_of_component(signature_id, component_id);
+            const auto offset = row_offset_of_component(signature_id, component_id);
 
-            memcpy((std::byte *)table.get_row_ptr(entities_status[entity].row) + column_offset,
-                   data, sizeof(T));
+            memcpy((std::byte *)table.get_row_ptr(entities_status[entity].row) + offset, data,
+                   sizeof(T));
 
             return;
         }
@@ -154,10 +157,12 @@ export struct World {
         auto new_signature_id =
             signature_atlas.create_or_get_signature_by_add_component(signature_id, component_id);
 
+        // If previously, entity has no component; create new row, no need copying data
         if (signature_id == EMPTY_SIGNATURE_ID) {
             ArchetypeTable &new_archetype_table =
-                archetype_tables.try_emplace(new_signature_id, signature_row_size(new_signature_id))
-                    .first->second;
+                archetype_tables.try_emplace(new_signature_id).first->second;
+            new_archetype_table.row_size = signature_row_size(new_signature_id);
+            new_archetype_table.row_align = signature_row_align(new_signature_id);
 
             auto new_row = new_archetype_table.create_row();
             auto *new_row_ptr = new_archetype_table.get_row_ptr(new_row);
@@ -174,8 +179,9 @@ export struct World {
 
         ArchetypeTable &old_archetype_table = archetype_tables.at(signature_id);
         ArchetypeTable &new_archetype_table =
-            archetype_tables.try_emplace(new_signature_id, signature_row_size(new_signature_id))
-                .first->second;
+            archetype_tables.try_emplace(new_signature_id).first->second;
+        new_archetype_table.row_size = signature_row_size(new_signature_id);
+        new_archetype_table.row_align = signature_row_align(new_signature_id);
 
         auto old_row = entities_status[entity].row;
         auto new_row = new_archetype_table.create_row();
@@ -193,55 +199,40 @@ export struct World {
             auto cur_componet_align = component_atlas.get_component_alignment(cur_component_id);
 
             if (new_signature_data.ptr[i] == component_id) {
-                memcpy(new_row_ptr, old_row_ptr, old_cur_row_offset);
-
-                new_cur_row_offset = align_up_offset(new_row_ptr, new_cur_row_offset, alignof(T));
+                new_cur_row_offset = align_up_offset(new_cur_row_offset, alignof(T));
 
                 memcpy((std::byte *)new_row_ptr + new_cur_row_offset, data, sizeof(T));
 
                 new_cur_row_offset += sizeof(T);
 
-                old_cur_row_offset =
-                    align_up_offset(old_row_ptr, old_cur_row_offset, cur_componet_align);
-                new_cur_row_offset =
-                    align_up_offset(new_row_ptr, new_cur_row_offset, cur_componet_align);
-
-                memcpy((std::byte *)new_row_ptr + new_cur_row_offset,
-                       (std::byte *)old_row_ptr + old_cur_row_offset,
-                       old_archetype_table.row_size - old_cur_row_offset);
-
                 flag = true;
-                break;
             }
+            old_cur_row_offset = align_up_offset(old_cur_row_offset, cur_componet_align);
+            new_cur_row_offset = align_up_offset(new_cur_row_offset, cur_componet_align);
 
-            old_cur_row_offset =
-                align_up_offset(old_row_ptr, old_cur_row_offset, cur_componet_align)
-                + cur_componet_size;
-            new_cur_row_offset =
-                align_up_offset(new_row_ptr, new_cur_row_offset, cur_componet_align)
-                + cur_componet_size;
+            memcpy((std::byte *)new_row_ptr + new_cur_row_offset,
+                   (std::byte *)old_row_ptr + old_cur_row_offset, cur_componet_size);
+
+            old_cur_row_offset += cur_componet_size;
+            new_cur_row_offset += cur_componet_size;
         }
-        if (!flag) {
-            memcpy(new_row_ptr, old_row_ptr, old_archetype_table.row_size);
-            memcpy((std::byte *)new_row_ptr + old_archetype_table.row_size, data, sizeof(T));
+        if (!flag) { // Component data itself has not been copied, append it to the last of the row
+            new_cur_row_offset = align_up_offset(new_cur_row_offset, alignof(T));
+            memcpy((std::byte *)new_row_ptr + new_cur_row_offset, data, sizeof(T));
         }
 
+        // Entity data
         new_archetype_table.entity_owned_list_ptr[new_row] = entity;
 
         entities_status[entity].signature_id = new_signature_id;
         entities_status[entity].row = new_row;
 
+        // Remove row, clean up old table
         auto old_last_row = old_archetype_table.row_count - 1;
-        if (old_last_row != old_row) {
-            auto *old_last_row_ptr = old_archetype_table.get_row_ptr(old_last_row);
-
-            memcpy(old_row_ptr, old_last_row_ptr, old_archetype_table.row_size);
-            old_archetype_table.entity_owned_list_ptr[old_row] =
-                old_archetype_table.entity_owned_list_ptr[old_last_row];
-
+        if (old_last_row != old_row)
             entities_status[old_archetype_table.entity_owned_list_ptr[old_last_row]].row = old_row;
-        }
-        --old_archetype_table.row_count;
+
+        old_archetype_table.remove_row(old_row);
     }
 
     auto try_remove_component_raw(Entity entity, ComponentID component_id) -> bool {
@@ -252,29 +243,24 @@ export struct World {
         auto component_size = component_atlas.get_component_size(component_id);
         auto component_align = component_atlas.get_component_alignment(component_id);
 
+        // If entity not contains component
         if (!signature_atlas.contains_component(signature_id, component_id)) return false;
 
         auto new_signature_id =
             signature_atlas.create_or_get_signature_by_remove_component(signature_id, component_id);
 
+        // If after remove, entity contains no component; just remove the row completely
         if (new_signature_id == EMPTY_SIGNATURE_ID) {
-            ArchetypeTable &old_archetype_table = archetype_tables.at(new_signature_id);
+            ArchetypeTable &old_archetype_table = archetype_tables.at(signature_id);
 
             auto old_row = entities_status[entity].row;
 
             auto old_last_row = old_archetype_table.row_count - 1;
             if (old_last_row != old_row) {
-                auto *old_row_ptr = old_archetype_table.get_row_ptr(old_row);
-                auto *old_last_row_ptr = old_archetype_table.get_row_ptr(old_last_row);
-
-                memcpy(old_row_ptr, old_last_row_ptr, old_archetype_table.row_size);
-                old_archetype_table.entity_owned_list_ptr[old_row] =
-                    old_archetype_table.entity_owned_list_ptr[old_last_row];
-
                 entities_status[old_archetype_table.entity_owned_list_ptr[old_last_row]].row =
                     old_row;
             }
-            --old_archetype_table.row_count;
+            old_archetype_table.remove_row(old_row);
 
             entities_status[entity].signature_id = EMPTY_SIGNATURE_ID;
             entities_status[entity].row = 0;
@@ -284,8 +270,9 @@ export struct World {
 
         ArchetypeTable &old_archetype_table = archetype_tables.at(signature_id);
         ArchetypeTable &new_archetype_table =
-            archetype_tables.try_emplace(new_signature_id, signature_row_size(new_signature_id))
-                .first->second;
+            archetype_tables.try_emplace(new_signature_id).first->second;
+        new_archetype_table.row_size = signature_row_size(new_signature_id);
+        new_archetype_table.row_align = signature_row_align(new_signature_id);
 
         auto old_row = entities_status[entity].row;
         auto new_row = new_archetype_table.create_row();
@@ -302,48 +289,32 @@ export struct World {
             auto cur_componet_align = component_atlas.get_component_alignment(cur_component_id);
 
             if (old_signature_data.ptr[i] == component_id) {
-                memcpy(new_row_ptr, old_row_ptr, old_cur_row_offset);
-
                 new_cur_row_offset =
-                    align_up_offset(new_row_ptr, new_cur_row_offset, component_align)
-                    + component_size;
-
-                old_cur_row_offset =
-                    align_up_offset(old_row_ptr, old_cur_row_offset, cur_componet_align);
-                new_cur_row_offset =
-                    align_up_offset(new_row_ptr, new_cur_row_offset, cur_componet_align);
-
-                memcpy((std::byte *)new_row_ptr + new_cur_row_offset,
-                       (std::byte *)old_row_ptr + old_cur_row_offset,
-                       old_archetype_table.row_size - old_cur_row_offset);
-
-                break;
+                    align_up_offset(new_cur_row_offset, component_align) + component_size;
             }
 
-            old_cur_row_offset =
-                align_up_offset(old_row_ptr, old_cur_row_offset, cur_componet_align)
-                + cur_componet_size;
-            new_cur_row_offset =
-                align_up_offset(new_row_ptr, new_cur_row_offset, cur_componet_align)
-                + cur_componet_size;
+            old_cur_row_offset = align_up_offset(old_cur_row_offset, cur_componet_align);
+            new_cur_row_offset = align_up_offset(new_cur_row_offset, cur_componet_align);
+
+            memcpy((std::byte *)new_row_ptr + new_cur_row_offset,
+                   (std::byte *)old_row_ptr + old_cur_row_offset, cur_componet_size);
+
+            old_cur_row_offset += cur_componet_size;
+            new_cur_row_offset += cur_componet_size;
         }
 
+        // Entity data
         new_archetype_table.entity_owned_list_ptr[new_row] = entity;
 
         entities_status[entity].signature_id = new_signature_id;
         entities_status[entity].row = new_row;
 
+        // Remove row, clean up old table
         auto old_last_row = old_archetype_table.row_count - 1;
-        if (old_last_row != old_row) {
-            auto *old_last_row_ptr = old_archetype_table.get_row_ptr(old_last_row);
-
-            memcpy(old_row_ptr, old_last_row_ptr, old_archetype_table.row_size);
-            old_archetype_table.entity_owned_list_ptr[old_row] =
-                old_archetype_table.entity_owned_list_ptr[old_last_row];
-
+        if (old_last_row != old_row)
             entities_status[old_archetype_table.entity_owned_list_ptr[old_last_row]].row = old_row;
-        }
-        --old_archetype_table.row_count;
+
+        old_archetype_table.remove_row(old_row);
 
         return true;
     }
@@ -356,9 +327,21 @@ export struct World {
         for (size_t i = 0; i < signature_data.size; ++i) {
             auto csize = component_atlas.get_component_size(signature_data.ptr[i]);
             auto calign = component_atlas.get_component_alignment(signature_data.ptr[i]);
-            size = align_up(size, calign) + csize;
+            size = align_up_offset(size, calign) + csize;
         }
         return size;
+    }
+
+    [[nodiscard]] auto signature_row_align(SignatureID sid) const -> size_t {
+        assert(sid < signature_atlas.signature_datas.size());
+
+        size_t align = 0;
+        const auto &signature_data = *signature_atlas.get_data(sid);
+        for (size_t i = 0; i < signature_data.size; ++i) {
+            auto calign = component_atlas.get_component_alignment(signature_data.ptr[i]);
+            align = std::max(align, calign);
+        }
+        return align;
     }
 
     [[nodiscard]] auto row_offset_of_component(SignatureID sid, ComponentID cid) const -> size_t {
@@ -373,11 +356,11 @@ export struct World {
 
             auto csize = component_atlas.get_component_size(*cur_component_ptr);
             auto calign = component_atlas.get_component_alignment(*cur_component_ptr);
-            offset = align_up(offset, calign) + csize;
+            offset = align_up_offset(offset, calign) + csize;
 
             ++cur_component_ptr;
         }
-        return align_up(offset, component_atlas.get_component_alignment(*cur_component_ptr));
+        return align_up_offset(offset, component_atlas.get_component_alignment(*cur_component_ptr));
     }
 };
 

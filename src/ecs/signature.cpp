@@ -19,8 +19,12 @@ export constexpr SignatureID EMPTY_SIGNATURE_ID = (SignatureID)-1;
 
 export struct SignatureAtlas {
     struct SignatureData {
-        ComponentID *ptr;
-        size_t size;
+        ComponentID *ptr = nullptr;
+        size_t size = 0;
+
+        inline auto free() {
+            ::free(ptr);
+        }
 
         bool operator==(const SignatureData &other) const {
             if (size != other.size) return false;
@@ -35,7 +39,7 @@ export struct SignatureAtlas {
     };
 
     struct SignatureCacheTransition {
-        SignatureID from;
+        SignatureID from = (SignatureID)-1;
         ComponentID component;
 
         auto operator<=>(const SignatureCacheTransition &) const = default;
@@ -61,14 +65,9 @@ export struct SignatureAtlas {
                              SignatureCacheTransition::Hasher>
         signature_remove_component_cache;
 
-    SignatureAtlas() = default;
-    SignatureAtlas(const SignatureAtlas &) = delete;
-    SignatureAtlas &operator=(const SignatureAtlas &) = delete;
-    SignatureAtlas(SignatureAtlas &&) noexcept = default;
-    SignatureAtlas &operator=(SignatureAtlas &&) noexcept = default;
-    ~SignatureAtlas() {
-        for (auto &c : signature_datas) {
-            free(c.ptr);
+    constexpr auto free() {
+        for (auto &x : signature_datas) {
+            x.free();
         }
     }
 
@@ -107,8 +106,7 @@ export struct SignatureAtlas {
         }
 
         if (existed_id == EMPTY_SIGNATURE_ID) {
-            signature_datas.emplace_back(
-                SignatureData{(ComponentID *)malloc(1 * sizeof(ComponentID)), 1});
+            signature_datas.emplace_back((ComponentID *)malloc(1 * sizeof(ComponentID)), 1);
             signature_datas.back().ptr[0] = cid;
 
             signature_add_component_cache.emplace(SignatureCacheTransition{existed_id, cid},
@@ -141,8 +139,8 @@ export struct SignatureAtlas {
             data_to_id_map.find(SignatureData{temp_new_data, new_size});
         size_t new_id;
         if (temp_new_signature_id_iter == data_to_id_map.end()) {
-            signature_datas.emplace_back(
-                SignatureData{(ComponentID *)malloc(new_size * sizeof(ComponentID)), new_size});
+            signature_datas.emplace_back((ComponentID *)malloc(new_size * sizeof(ComponentID)),
+                                         new_size);
             auto &new_data = signature_datas.back();
             memcpy(&new_data.ptr[0], temp_new_data, new_size * sizeof(size_t));
 
@@ -169,6 +167,8 @@ export struct SignatureAtlas {
 
         const auto &old_data = signature_datas[existed_id];
 
+        if (old_data.size == 1) return EMPTY_SIGNATURE_ID;
+
         const auto new_size = old_data.size - 1;
         auto *temp_new_data = (size_t *)alloca(new_size * sizeof(size_t));
 
@@ -184,8 +184,8 @@ export struct SignatureAtlas {
             data_to_id_map.find(SignatureData{temp_new_data, new_size});
         size_t new_id;
         if (temp_new_signature_id_iter == data_to_id_map.end()) {
-            signature_datas.emplace_back(
-                SignatureData{(ComponentID *)malloc(new_size * sizeof(ComponentID)), new_size});
+            signature_datas.emplace_back((ComponentID *)malloc(new_size * sizeof(ComponentID)),
+                                         new_size);
             auto &new_data = signature_datas.back();
             memcpy(&new_data.ptr[0], temp_new_data, new_size * sizeof(size_t));
 
