@@ -56,12 +56,14 @@ export struct ArchetypeTable {
             assert(new_table_ptr);
             if (table_ptr) {
                 memcpy(new_table_ptr, table_ptr, capacity * row_size_with_padding);
+                ::free(table_ptr);
             }
             table_ptr = new_table_ptr;
 
             auto *new_entity_list = (Entity *)malloc(new_capacity * sizeof(Entity));
             if (entity_owned_list_ptr) {
                 memcpy(new_entity_list, entity_owned_list_ptr, capacity * sizeof(Entity));
+                ::free(entity_owned_list_ptr);
             }
             entity_owned_list_ptr = new_entity_list;
 
