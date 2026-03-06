@@ -235,7 +235,10 @@ struct SlotMap {
     constexpr auto clear() -> void {
         data.clear();
         data_map.clear();
-        slots.clear();
+        for (size_type i = 0; i < slots.size(); ++i) {
+            ++slots[i].gen;
+            slots[i].index = i + 1;
+        }
         next_slot_index = 0;
     }
 

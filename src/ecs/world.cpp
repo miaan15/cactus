@@ -42,53 +42,6 @@ export struct World {
         signature_atlas.free();
     }
 
-    // FIXME: DEBUG STUFF
-    std::string debug_str;
-    [[nodiscard]] auto get_debug() -> const std::string & {
-        debug_str = "";
-
-        debug_str += "Entites:\n";
-        int __i = 0;
-        for (auto &x : entities_status) {
-            debug_str +=
-                std::format("  {}: signature_id {}; row {}\n", __i++, x.signature_id, x.row);
-        }
-
-        debug_str += "Components:\n";
-        for (auto &[id, p] : component_atlas.component_property_map) {
-            debug_str += std::format("  {}: size {} - alignment {}", id, tuplet::get<0>(p),
-                                     tuplet::get<1>(p));
-            debug_str += "\n";
-        }
-
-        debug_str += "Signatures:\n";
-        __i = 0;
-        for (auto &x : signature_atlas.signature_datas) {
-            debug_str += std::format("  signature {} constains: ", __i);
-            for (size_t i = 0; i < x.size; ++i) debug_str += std::format("{} ", x.ptr[i]);
-            debug_str += "\n";
-            ++__i;
-        }
-
-        debug_str += "Archetype tables:\n";
-        for (auto &&[id, table] : archetype_tables) {
-            debug_str += std::format("  signature_id {}: table with {} rows; each size {}\n", id,
-                                     table.row_count, table.row_size);
-
-            for (size_t i = 0; i < table.row_count; ++i) {
-                auto *row_ptr = table.get_row_ptr(i);
-                debug_str += std::format("    row {} owned by {} at {}: ", i,
-                                         tuplet::get<0>(table.entity_owned_list_ptr[i]), row_ptr);
-                for (std::size_t j = 0; j < table.row_size; ++j) {
-                    debug_str += std::format("{:02x} ", *((char *)row_ptr + j));
-                }
-                debug_str += "\n";
-            }
-        }
-
-        return debug_str;
-    }
-
     [[nodiscard]] auto create_entity() -> Entity {
         auto entity = entities_status.emplace(EMPTY_SIGNATURE_ID, 0);
         return entity;
