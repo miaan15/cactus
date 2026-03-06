@@ -10,7 +10,7 @@ export module Ecs:Component;
 
 import :Common;
 
-namespace cactus::ecs {
+namespace cactus {
 
 export using ComponentID = size_t;
 
@@ -46,4 +46,4 @@ export struct ComponentAtlas {
     }
 };
 
-} // namespace cactus::ecs
+} // namespace cactus

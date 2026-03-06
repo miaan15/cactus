@@ -11,7 +11,7 @@ export module Ecs:Signature;
 import :Common;
 import :Component;
 
-namespace cactus::ecs {
+namespace cactus {
 
 export using SignatureID = size_t;
 
@@ -201,4 +201,4 @@ export struct SignatureAtlas {
     }
 };
 
-} // namespace cactus::ecs
+} // namespace cactus

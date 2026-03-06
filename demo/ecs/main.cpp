@@ -1,9 +1,8 @@
-#include <cstddef>
 #include <cstdint>
 
 import Ecs;
 
-using namespace cactus::ecs;
+using namespace cactus;
 
 struct Position {
     float x, y, z;

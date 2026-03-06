@@ -17,7 +17,7 @@ import :Archetype;
 
 import SlotMap;
 
-namespace cactus::ecs {
+namespace cactus {
 
 export struct World {
     struct EntityStatus {
@@ -319,4 +319,4 @@ export struct World {
     }
 };
 
-} // namespace cactus::ecs
+} // namespace cactus

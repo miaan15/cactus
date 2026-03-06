@@ -2,10 +2,10 @@ module;
 
 #include <cstddef>
 
-#include <tuplet/tuple.hpp>
 #include <boost/container/vector.hpp>
 #include <boost/container_hash/hash.hpp>
 #include <boost/unordered/unordered_flat_map.hpp>
+#include <tuplet/tuple.hpp>
 
 export module Ecs:Common;
 
@@ -25,8 +25,8 @@ using ::boost::hash_combine;
 using ::boost::hash_range;
 } // namespace boost
 
-namespace cactus::ecs {
+namespace cactus {
 
 export using Entity = tuplet::tuple<size_t, size_t>;
 
-} // namespace cactus::ecs
+} // namespace cactus
