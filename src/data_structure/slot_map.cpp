@@ -148,8 +148,7 @@ struct SlotMap {
         return get(key_type::from(key));
     }
 
-    template <class... Args>
-    constexpr auto emplace(Args &&...args) -> key_type {
+    template <class... Args> constexpr auto emplace(Args &&...args) -> key_type {
         data.emplace_back(std::forward<Args>(args)...);
         data_map.emplace_back(next_slot_index);
 

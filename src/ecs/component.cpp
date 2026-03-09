@@ -1,9 +1,9 @@
 module;
 
+#include <cassert>
 #include <cstddef>
 #include <cstdlib>
 #include <tuplet/tuple.hpp>
-#include <cassert>
 #include <typeinfo>
 
 export module Ecs:Component;
@@ -14,8 +14,7 @@ namespace cactus {
 
 export using ComponentID = size_t;
 
-export template <typename T>
-[[nodiscard]] auto component_id() -> ComponentID {
+export template <typename T> [[nodiscard]] auto component_id() -> ComponentID {
     return typeid(T).hash_code();
 }
 
@@ -37,8 +36,7 @@ export struct ComponentAtlas {
         return tuplet::get<1>(iter->second);
     }
 
-    template <typename T>
-    auto register_component() {
+    template <typename T> auto register_component() {
         auto id = component_id<T>();
         auto iter = component_property_map.find(id);
         if (iter != component_property_map.end()) return;

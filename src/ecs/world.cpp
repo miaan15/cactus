@@ -1,11 +1,10 @@
 module;
 
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cstring>
-#include <format>
 #include <optional>
-#include <string>
 #include <tuplet/tuple.hpp>
 
 export module Ecs:World;
@@ -51,8 +50,7 @@ export struct World {
         return entities_status.contains(entity);
     }
 
-    template <typename T>
-    [[nodiscard]] auto get_component(Entity entity) -> std::optional<T *> {
+    template <typename T> [[nodiscard]] auto get_component(Entity entity) -> std::optional<T *> {
         if (!contains_entity(entity)) return {};
 
         auto id = component_id<T>();
@@ -65,8 +63,7 @@ export struct World {
                      + row_offset_of_component(signature_id, id));
     }
 
-    template <typename T>
-    [[nodiscard]] auto contains_component(Entity entity) -> bool {
+    template <typename T> [[nodiscard]] auto contains_component(Entity entity) -> bool {
         if (!contains_entity(entity)) return {};
 
         auto id = component_id<T>();
@@ -75,8 +72,8 @@ export struct World {
         return signature_atlas.contains_component(signature_id, id);
     }
 
-    template <typename T, typename... Args>
-    auto emplace_component(Entity entity, Args... args) -> bool {
+    template <typename T, typename... Args> auto emplace_component(Entity entity, Args... args)
+        -> bool {
         if (!contains_entity(entity)) return false;
         component_atlas.register_component<T>();
         T data{std::forward<Args>(args)...};
@@ -84,8 +81,7 @@ export struct World {
         return true;
     }
 
-    template <typename T>
-    auto remove_component(Entity entity) -> bool {
+    template <typename T> auto remove_component(Entity entity) -> bool {
         if (!contains_entity(entity)) return false;
         return try_remove_component_raw(entity, component_id<T>());
     }

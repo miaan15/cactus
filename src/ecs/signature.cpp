@@ -58,11 +58,9 @@ export struct SignatureAtlas {
 
     bstu::unordered_flat_map<SignatureData, SignatureID, SignatureData::Hasher> data_to_id_map;
 
-    bstu::unordered_flat_map<SignatureCacheTransition, SignatureID,
-                             SignatureCacheTransition::Hasher>
+    bstu::unordered_flat_map<SignatureCacheTransition, SignatureID, SignatureCacheTransition::Hasher>
         signature_add_component_cache;
-    bstu::unordered_flat_map<SignatureCacheTransition, SignatureID,
-                             SignatureCacheTransition::Hasher>
+    bstu::unordered_flat_map<SignatureCacheTransition, SignatureID, SignatureCacheTransition::Hasher>
         signature_remove_component_cache;
 
     constexpr auto free() {
