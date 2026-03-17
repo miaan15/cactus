@@ -1,0 +1,17 @@
+: world ! 0
+: Player 
+    :: transform !
+        [12, 21], # posision
+        -123, # rotation
+        [67, 36], # scale
+    :: rect_collider !
+        [4.7, -9.2], # center
+        [.5, .5], # half_extents
+    :: tag !
+        1, # id
+        true, # val
+: Enemy
+    :: transform !
+        [2, 2], # posision
+        -10.2, # rotation
+        [.12, .3], # scale
