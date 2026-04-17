@@ -54,57 +54,6 @@ slotmap_new :: proc {
 	slotmap_new_with_cap,
 }
 
-slotmap_handle_reserve_data :: proc(s: ^SlotMap($T), new_cap: int) {
-	if new_cap <= s.cap do return
-
-	new_data_raw, err := mem.alloc(new_cap * size_of(T), align_of(T), s.allocator)
-	assert(err == .None)
-	if err != .None {
-		return
-	}
-	new_data_slot_index_raw, err_ := mem.alloc(new_cap * size_of(int), align_of(int), s.allocator)
-	assert(err_ == .None)
-	if err_ != .None {
-		mem.free(new_data_raw, s.allocator)
-		return
-	}
-
-	if s.data_raw != nil {
-		mem.copy(new_data_raw, s.data_raw, s.len * size_of(T))
-		free(s.data_raw, s.allocator)
-	}
-	if s.data_slot_index_raw != nil {
-		mem.copy(new_data_slot_index_raw, s.data_slot_index_raw, s.len * size_of(int))
-		free(s.data_slot_index_raw, s.allocator)
-	}
-
-	s.data_raw = cast([^]T)new_data_raw
-	s.data_slot_index_raw = cast([^]int)new_data_slot_index_raw
-
-	s.cap = new_cap
-}
-
-slotmap_handle_append_data :: proc(s: ^SlotMap($T), val: T, slot_index: int) {
-	if (s.len + 1 > s.cap) {
-		new_cap := max(4, s.cap + (s.cap >> 1))
-		slotmap_handle_reserve_data(s, new_cap)
-	}
-
-	s.data_raw[s.len] = val
-	s.data_slot_index_raw[s.len] = slot_index
-
-	s.len += 1
-}
-
-slotmap_handle_pop_data :: proc(s: ^SlotMap($T)) {
-	assert(s.len > 0)
-	s.len -= 1
-}
-
-slotmap_handle_clear_data :: proc(s: ^SlotMap($T)) {
-	s.len = 0
-}
-
 slotmap_append :: proc(s: ^SlotMap($T), val: T) -> SlotMapKey {
 	slotmap_handle_append_data(s, val, s.next_slot_index)
 
@@ -220,4 +169,59 @@ slotmap_delete :: proc(s: ^SlotMap($T)) {
 	mem.free(s.data_raw, s.allocator)
 	mem.free(s.data_slot_index_raw, s.allocator)
 	delete(s.slots)
+}
+
+@(private)
+slotmap_handle_reserve_data :: proc(s: ^SlotMap($T), new_cap: int) {
+	if new_cap <= s.cap do return
+
+	new_data_raw, err := mem.alloc(new_cap * size_of(T), align_of(T), s.allocator)
+	assert(err == .None)
+	if err != .None {
+		return
+	}
+	new_data_slot_index_raw, err_ := mem.alloc(new_cap * size_of(int), align_of(int), s.allocator)
+	assert(err_ == .None)
+	if err_ != .None {
+		mem.free(new_data_raw, s.allocator)
+		return
+	}
+
+	if s.data_raw != nil {
+		mem.copy(new_data_raw, s.data_raw, s.len * size_of(T))
+		free(s.data_raw, s.allocator)
+	}
+	if s.data_slot_index_raw != nil {
+		mem.copy(new_data_slot_index_raw, s.data_slot_index_raw, s.len * size_of(int))
+		free(s.data_slot_index_raw, s.allocator)
+	}
+
+	s.data_raw = cast([^]T)new_data_raw
+	s.data_slot_index_raw = cast([^]int)new_data_slot_index_raw
+
+	s.cap = new_cap
+}
+
+@(private)
+slotmap_handle_append_data :: proc(s: ^SlotMap($T), val: T, slot_index: int) {
+	if (s.len + 1 > s.cap) {
+		new_cap := max(4, s.cap + (s.cap >> 1))
+		slotmap_handle_reserve_data(s, new_cap)
+	}
+
+	s.data_raw[s.len] = val
+	s.data_slot_index_raw[s.len] = slot_index
+
+	s.len += 1
+}
+
+@(private)
+slotmap_handle_pop_data :: proc(s: ^SlotMap($T)) {
+	assert(s.len > 0)
+	s.len -= 1
+}
+
+@(private)
+slotmap_handle_clear_data :: proc(s: ^SlotMap($T)) {
+	s.len = 0
 }
