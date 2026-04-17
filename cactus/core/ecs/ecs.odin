@@ -1,5 +1,7 @@
 package ecs
 
+import "cactus:strat"
+
 EntityID :: distinct i32
 SignatureID :: distinct i32
 

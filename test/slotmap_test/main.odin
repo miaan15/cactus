@@ -1,8 +1,8 @@
-package strat_test
+package slotmap_test
 
 import "core:testing"
 
-import "../../src/strat"
+import "cactus:core/strat"
 
 MyType :: struct {
 	x: int,
