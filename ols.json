@@ -1,8 +1,9 @@
 {
-  "collections": [
-    {
-      "name": "cactus",
-      "path": "cactus"
-    }
-  ]
+    "tabs": false,
+    "collections": [
+        {
+            "name": "cactus",
+            "path": "cactus"
+        }
+    ]
 }
