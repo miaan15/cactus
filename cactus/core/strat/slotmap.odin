@@ -54,9 +54,9 @@ slotmap_new :: proc {
     slotmap_new_with_cap,
 }
 
-slotmap_delete :: proc(s: ^SlotMap($T)) {
-    mem.free(s.data_raw, s.allocator)
-    mem.free(s.data_slot_index_raw, s.allocator)
+slotmap_delete :: proc(s: SlotMap($T)) {
+    if s.data_raw != nil do mem.free(s.data_raw, s.allocator)
+    if s.data_raw != nil do mem.free(s.data_slot_index_raw, s.allocator)
     delete(s.slots)
 }
 
@@ -107,7 +107,7 @@ slotmap_remove :: proc(s: ^SlotMap($T), key: SlotMapKey) -> bool {
     return true
 }
 
-slotmap_get :: proc(s: ^SlotMap($T), key: SlotMapKey) -> (T, bool) {
+slotmap_get :: proc(s: SlotMap($T), key: SlotMapKey) -> (T, bool) {
     index := key.index
     if index >= len(s.slots) do return {}, false
 
@@ -126,6 +126,16 @@ slotmap_get_ptr :: proc(s: ^SlotMap($T), key: SlotMapKey) -> ^T {
     return &s.data_raw[slot.index]
 }
 
+slotmap_has :: proc(s: ^SlotMap($T), key: SlotMapKey) -> bool {
+    index := key.index
+    if index >= len(s.slots) do return false
+
+    slot := s.slots[index]
+    if key.gen != slot.gen do return false
+
+    return true
+}
+
 slotmap_clear :: proc(s: ^SlotMap($T)) {
     slotmap_handle_clear_data(s)
 
@@ -136,9 +146,9 @@ slotmap_clear :: proc(s: ^SlotMap($T)) {
     s.next_slot_index = 0
 }
 
-slotmap_reserve :: proc(s: ^SlotMap($T), new_cap: int) {
-    slotmap_handle_reserve_data(s, new_cap)
-    reserve(&s.slots, new_cap)
+slotmap_reserve :: proc(s: ^SlotMap($T), cap: int) {
+    slotmap_handle_reserve_data(s, cap)
+    reserve(&s.slots, cap)
 }
 
 slotmap_len :: proc(s: ^SlotMap($T)) -> int {
@@ -172,18 +182,21 @@ slotmap_iterate_ptr :: proc(s: ^SlotMap($T), i: ^int) -> (val: ^T, index: int, o
 }
 
 @(private)
-slotmap_handle_reserve_data :: proc(s: ^SlotMap($T), new_cap: int) {
-    if new_cap <= s.cap do return
+slotmap_handle_reserve_data :: proc(s: ^SlotMap($T), cap: int) {
+    if cap <= s.cap do return
 
-    new_data_raw, err := mem.alloc(new_cap * size_of(T), align_of(T), s.allocator)
-    assert(err == .None)
+    new_data_raw, err := mem.alloc(cap * size_of(T), align_of(T), s.allocator)
     if err != .None {
+        // TODO error
+        assert(false)
         return
     }
-    new_data_slot_index_raw, err_ := mem.alloc(new_cap * size_of(int), align_of(int), s.allocator)
+    new_data_slot_index_raw, err_ := mem.alloc(cap * size_of(int), align_of(int), s.allocator)
     assert(err_ == .None)
     if err_ != .None {
         mem.free(new_data_raw, s.allocator)
+        // TODO error
+        assert(false)
         return
     }
 
@@ -199,7 +212,7 @@ slotmap_handle_reserve_data :: proc(s: ^SlotMap($T), new_cap: int) {
     s.data_raw = cast([^]T)new_data_raw
     s.data_slot_index_raw = cast([^]int)new_data_slot_index_raw
 
-    s.cap = new_cap
+    s.cap = cap
 }
 
 @(private)
