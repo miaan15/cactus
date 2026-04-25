@@ -37,6 +37,7 @@ set(MODS_DIR ${CMAKE_SOURCE_DIR}/mods)
 set(SRC_DIR "${CMAKE_SOURCE_DIR}/src")
 set(DEMO_DIR "${CMAKE_SOURCE_DIR}/demo")
 set(TEST_DIR "${CMAKE_SOURCE_DIR}/test")
+file(GLOB_RECURSE SRCS CONFIGURE_DEPENDS "${SRC_DIR}/*.cpp")
 
 if(USE_ASAN)
     add_compile_options(-fsanitize=address -fno-omit-frame-pointer -g)
@@ -65,10 +66,14 @@ macro(create_precompiled_mod target)
     target_link_options(${MOD_TARGET} PUBLIC -stdlib=libc++)
 endmacro()
 
-set(MODS "")
+
+# Set modules
+set(MOD_SOURCES ${SRCS})
+
 create_precompiled_mod(std)
-string(APPEND MODS ${MOD_TARGET})
+list(APPEND MOD_LIBS ${MOD_TARGET})
 
 # Finalize
-add_executable(cactus_main ${SRC_DIR}/main.cpp)
-target_link_libraries(cactus_main PRIVATE ${MODS})
+add_executable(cactus_demo_main ${DEMO_DIR}/main.cpp)
+target_sources(cactus_demo_main PRIVATE FILE_SET CXX_MODULES FILES ${MOD_SOURCES})
+target_link_libraries(cactus_demo_main PRIVATE ${MOD_LIBS})
