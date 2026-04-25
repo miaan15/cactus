@@ -7,11 +7,16 @@ cd ./vendor
 
 # Use:
 # - stdc++
+# - raylib
 # - glm
 # - spdlog
 # - gtest
 
 mkdir -p .
+
+if [ ! -d "./raylib" ]; then
+    git clone --depth 1 --branch 6.0 https://github.com/raysan5/raylib.git ./raylib
+fi
 
 if [ ! -d "./glm" ]; then
     git clone --depth 1 --branch 1.0.3 https://github.com/g-truc/glm.git ./glm

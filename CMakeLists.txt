@@ -44,6 +44,20 @@ if(USE_ASAN)
     add_link_options(-fsanitize=address)
 endif()
 
+# Fetch
+message(STATUS "Running vendor fetch script...")
+set(FETCH_VENDORS_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/fetch_vendors.sh)
+file(CHMOD "${FETCH_VENDORS_SCRIPT}"
+    PERMISSIONS
+    OWNER_READ OWNER_WRITE OWNER_EXECUTE
+    GROUP_READ GROUP_EXECUTE
+    WORLD_READ WORLD_EXECUTE
+)
+execute_process(
+    COMMAND "${FETCH_VENDORS_SCRIPT}"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+
 # Create precompiled modules
 macro(create_precompiled_mod target)
     set(MOD_TARGET ${target}_MOD)
