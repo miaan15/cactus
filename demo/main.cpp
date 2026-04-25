@@ -24,6 +24,4 @@ int main() {
              std::views::transform([](int n) { return n / 10 + 1; });
     for (auto x : r) { std::cout << x << " "; }
     std::cout << "\n";
-
-    sm.free();
 }

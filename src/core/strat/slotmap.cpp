@@ -55,11 +55,10 @@ export template <typename T, typename Alloc = std::allocator<T>> struct SlotMap 
                        .size_allocator = size_allocator};
     }
 
-    auto free() {
+    ~SlotMap() {
         if (this->data_raw != nullptr) AllocTraits::deallocate(this->allocator, this->data_raw, this->cap);
         if (this->data_slot_index_raw != nullptr)
             SizeAllocTraits::deallocate(this->size_allocator, this->data_slot_index_raw, this->cap);
-        // this->slots.~vector();
     }
 
     [[nodiscard]] auto push(const T &val) -> SlotMapKey {
