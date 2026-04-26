@@ -214,7 +214,10 @@ export struct SignatureAtlas {
     }
 
     [[nodiscard]] auto has(SignatureAtlasKey key) const -> bool { return key < signatures.size(); }
-    [[nodiscard]] auto get(SignatureAtlasKey key) const -> const Signature * { return &signatures[key]; }
+    [[nodiscard]] auto get(SignatureAtlasKey key) const -> std::optional<const Signature *> {
+        if (key >= signatures.size()) return {};
+        return &signatures[key];
+    }
 
     auto new_signature(Signature &&signature) -> size_t {
         signatures.push_back(signature);
@@ -240,7 +243,7 @@ export struct SignatureAtlas {
             return new_key;
         }
 
-        const Signature *cur_signature = this->get(key);
+        const Signature *cur_signature = this->get(key).value();
 
         if (cur_signature->has(component)) return {};
 
@@ -274,7 +277,7 @@ export struct SignatureAtlas {
             if (to_key_it != this->transitions_by_remove.end()) return to_key_it->second;
         }
 
-        const Signature *cur_signature = this->get(key);
+        const Signature *cur_signature = this->get(key).value();
 
         if (!cur_signature->has(component)) return {};
 

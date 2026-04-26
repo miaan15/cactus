@@ -14,24 +14,28 @@ using size_t = std::size_t;
 namespace cactus {
 
 export [[nodiscard]] auto align_up(size_t p, size_t align) -> size_t;
-[[nodiscard]] auto handle_cal_row_size(ComponentSizeAlignAtlas *component_size_align_atlas_ref, const Signature *signature)
-    -> size_t;
+[[nodiscard]] auto handle_cal_row_size(ComponentSizeAlignAtlas *component_size_align_atlas_ref,
+                                       SignatureAtlas *signature_atlas_ref, SignatureAtlasKey signature_key) -> size_t;
 
 export struct Archetype {
     ComponentSizeAlignAtlas *component_size_align_atlas_ref;
-    const Signature *signature;
+    SignatureAtlas *signature_atlas_ref;
+    SignatureAtlasKey signature_key;
 
     char *table_raw;
     size_t row_size;
     size_t len;
     size_t cap;
 
-    [[nodiscard]] static auto make(ComponentSizeAlignAtlas *component_size_align_atlas_ref, const Signature *signature)
-        -> Archetype {
+    [[nodiscard]] static auto make(ComponentSizeAlignAtlas *component_size_align_atlas_ref, SignatureAtlas *signature_atlas_ref,
+                                   SignatureAtlasKey signature_key) -> Archetype {
+        assert(signature_atlas_ref->has(signature_key));
+
         return Archetype{.component_size_align_atlas_ref = component_size_align_atlas_ref,
-                         .signature = signature,
+                         .signature_atlas_ref = signature_atlas_ref,
+                         .signature_key = signature_key,
                          .table_raw = nullptr,
-                         .row_size = handle_cal_row_size(component_size_align_atlas_ref, signature),
+                         .row_size = handle_cal_row_size(component_size_align_atlas_ref, signature_atlas_ref, signature_key),
                          .len = 0,
                          .cap = 0};
     }
@@ -54,6 +58,7 @@ export struct Archetype {
     auto append() -> size_t {
         if (this->len >= this->cap) {
             size_t new_cap = this->cap * 2;
+            if (new_cap < 4) new_cap = 4;
             this->reserve(new_cap);
         }
 
@@ -85,7 +90,9 @@ export struct Archetype {
         return this->table_raw + index * this->row_size;
     }
     [[nodiscard]] auto get_component_row_offset(std::type_index component) const -> std::optional<size_t> {
-        if (!this->signature->has(component)) return {};
+        const Signature *signature = signature_atlas_ref->get(signature_key).value();
+
+        if (!signature->has(component)) return {};
 
         size_t res = 0;
 
@@ -126,8 +133,10 @@ export struct Archetype {
     return (p + align - 1) & ~(align - 1);
 }
 
-[[nodiscard]] auto handle_cal_row_size(ComponentSizeAlignAtlas *component_size_align_atlas_ref, const Signature *signature)
-    -> size_t {
+[[nodiscard]] auto handle_cal_row_size(ComponentSizeAlignAtlas *component_size_align_atlas_ref,
+                                       SignatureAtlas *signature_atlas_ref, SignatureAtlasKey signature_key) -> size_t {
+    const Signature *signature = signature_atlas_ref->get(signature_key).value();
+
     size_t res = 0;
 
     for (size_t i = 0; i < signature->len; i++) {
@@ -160,9 +169,13 @@ export using ArchetypeAtlasKey = size_t;
 export struct ArchetypeAtlas {
     std::vector<Archetype> archetypes;
     ComponentSizeAlignAtlas *component_size_align_atlas_ref;
+    SignatureAtlas *signature_atlas_ref;
 
-    [[nodiscard]] static auto make(ComponentSizeAlignAtlas *component_size_align_atlas_ref) -> ArchetypeAtlas {
-        return ArchetypeAtlas{.archetypes = {}, .component_size_align_atlas_ref = component_size_align_atlas_ref};
+    [[nodiscard]] static auto make(ComponentSizeAlignAtlas *component_size_align_atlas_ref, SignatureAtlas *signature_atlas_ref)
+        -> ArchetypeAtlas {
+        return ArchetypeAtlas{.archetypes = {},
+                              .component_size_align_atlas_ref = component_size_align_atlas_ref,
+                              .signature_atlas_ref = signature_atlas_ref};
     }
 
     auto destroy() const {
@@ -170,11 +183,17 @@ export struct ArchetypeAtlas {
     }
 
     [[nodiscard]] auto has(ArchetypeAtlasKey key) const -> bool { return key < archetypes.size(); }
-    [[nodiscard]] auto get(ArchetypeAtlasKey key) const -> const Archetype * { return &archetypes[key]; }
-    [[nodiscard]] auto get(ArchetypeAtlasKey key) -> Archetype * { return &archetypes[key]; }
+    [[nodiscard]] auto get(ArchetypeAtlasKey key) const -> std::optional<const Archetype *> {
+        if (key >= archetypes.size()) return {};
+        return &archetypes[key];
+    }
+    [[nodiscard]] auto get(ArchetypeAtlasKey key) -> std::optional<Archetype *> {
+        if (key >= archetypes.size()) return {};
+        return &archetypes[key];
+    }
 
-    auto new_archetype(const Signature *signature) -> size_t {
-        archetypes.push_back(Archetype::make(this->component_size_align_atlas_ref, signature));
+    auto new_archetype(SignatureAtlasKey signature_key) -> size_t {
+        archetypes.push_back(Archetype::make(this->component_size_align_atlas_ref, this->signature_atlas_ref, signature_key));
         return archetypes.size() - 1;
     }
 };
