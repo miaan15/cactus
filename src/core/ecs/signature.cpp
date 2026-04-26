@@ -160,6 +160,11 @@ export struct Signature {
         return false;
     }
 
+    [[nodiscard]] auto get(size_t index) const -> std::optional<std::type_index> {
+        if (index >= this->len) return {};
+        return this->data_raw[index];
+    }
+
 private:
     [[nodiscard]] auto is_dup_components(std::initializer_list<std::type_index> components) -> bool {
         for (const auto &c : components) {
@@ -205,12 +210,11 @@ export struct SignatureAtlas {
     [[nodiscard]] static auto make() -> SignatureAtlas { return SignatureAtlas{}; }
 
     auto destroy() const {
-        for (auto &s : signatures) s.destroy();
+        for (const auto &s : signatures) s.destroy();
     }
 
     [[nodiscard]] auto has(SignatureAtlasKey key) const -> bool { return key < signatures.size(); }
-    [[nodiscard]] auto get(SignatureAtlasKey key) const -> const Signature { return signatures[key]; }
-    [[nodiscard]] auto get_ptr(SignatureAtlasKey key) const -> const Signature* { return &signatures[key]; }
+    [[nodiscard]] auto get(SignatureAtlasKey key) const -> const Signature * { return &signatures[key]; }
 
     auto new_signature(Signature &&signature) -> size_t {
         signatures.push_back(signature);
@@ -236,11 +240,11 @@ export struct SignatureAtlas {
             return new_key;
         }
 
-        const Signature cur_signature = this->get(key);
+        const Signature *cur_signature = this->get(key);
 
-        if (cur_signature.has(component)) return {};
+        if (cur_signature->has(component)) return {};
 
-        Signature new_signature = cur_signature.clone();
+        Signature new_signature = cur_signature->clone();
         new_signature.push(component);
 
         auto existed_new_key_it = this->signature_to_key_map.find(new_signature);
@@ -270,11 +274,11 @@ export struct SignatureAtlas {
             if (to_key_it != this->transitions_by_remove.end()) return to_key_it->second;
         }
 
-        const Signature cur_signature = this->get(key);
+        const Signature *cur_signature = this->get(key);
 
-        if (!cur_signature.has(component)) return {};
+        if (!cur_signature->has(component)) return {};
 
-        if (cur_signature.len == 1) {
+        if (cur_signature->len == 1) {
             SignatureAtlasKey new_key = EMPTY_SIGNATURE_KEY;
 
             transitions_by_remove[SignatureTransition{key, component}] = new_key;
@@ -282,7 +286,7 @@ export struct SignatureAtlas {
             return new_key;
         }
 
-        Signature new_signature = cur_signature.clone();
+        Signature new_signature = cur_signature->clone();
         new_signature.remove(component);
 
         auto existed_new_key_it = this->signature_to_key_map.find(new_signature);

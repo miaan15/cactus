@@ -18,9 +18,10 @@ export struct ComponentSizeAlignAtlas {
 
     [[nodiscard]] static auto make() -> ComponentSizeAlignAtlas { return ComponentSizeAlignAtlas{}; }
 
+    auto destroy() const {}
+
     template <typename T> auto push() {
-        component_size_align_data.insert_or_assign(std::type_index(typeid(T)),
-                                                       ComponentSizeAlignData{sizeof(T), alignof(T)});
+        component_size_align_data.insert_or_assign(std::type_index(typeid(T)), ComponentSizeAlignData{sizeof(T), alignof(T)});
     }
 
     template <typename T> [[nodiscard]] auto has() -> bool {

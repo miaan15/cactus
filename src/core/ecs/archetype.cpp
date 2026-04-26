@@ -13,7 +13,7 @@ using size_t = std::size_t;
 
 namespace cactus {
 
-[[nodiscard]] auto align_up(size_t p, size_t align) -> size_t;
+export [[nodiscard]] auto align_up(size_t p, size_t align) -> size_t;
 [[nodiscard]] auto handle_cal_row_size(ComponentSizeAlignAtlas *component_size_align_atlas_ref, const Signature *signature)
     -> size_t;
 
@@ -78,7 +78,11 @@ export struct Archetype {
 
     [[nodiscard]] auto get_row_ptr(size_t index) const -> std::optional<const void *> {
         if (index >= this->len) return {};
-        return (const void *)(this->table_raw + index * this->row_size);
+        return this->table_raw + index * this->row_size;
+    }
+    [[nodiscard]] auto get_row_ptr(size_t index) -> std::optional<void *> {
+        if (index >= this->len) return {};
+        return this->table_raw + index * this->row_size;
     }
     [[nodiscard]] auto get_component_row_offset(std::type_index component) const -> std::optional<size_t> {
         if (!this->signature->has(component)) return {};
@@ -103,11 +107,17 @@ export struct Archetype {
 
         return res;
     }
-    [[nodiscard]] auto get_component_ptr(size_t index, std::type_index component) -> const void * {
+    [[nodiscard]] auto get_component_ptr(size_t index, std::type_index component) const -> const void * {
         auto row_opt = get_row_ptr(index);
         auto offset_opt = get_component_row_offset(component);
         if (!row_opt.has_value() || !offset_opt.has_value()) return {};
         return (const char *)*row_opt + *offset_opt;
+    }
+    [[nodiscard]] auto get_component_ptr(size_t index, std::type_index component) -> void * {
+        auto row_opt = get_row_ptr(index);
+        auto offset_opt = get_component_row_offset(component);
+        if (!row_opt.has_value() || !offset_opt.has_value()) return {};
+        return (char *)*row_opt + *offset_opt;
     }
 };
 
@@ -144,5 +154,29 @@ export struct Archetype {
 
     return res;
 }
+
+export using ArchetypeAtlasKey = size_t;
+
+export struct ArchetypeAtlas {
+    std::vector<Archetype> archetypes;
+    ComponentSizeAlignAtlas *component_size_align_atlas_ref;
+
+    [[nodiscard]] static auto make(ComponentSizeAlignAtlas *component_size_align_atlas_ref) -> ArchetypeAtlas {
+        return ArchetypeAtlas{.archetypes = {}, .component_size_align_atlas_ref = component_size_align_atlas_ref};
+    }
+
+    auto destroy() const {
+        for (const auto &a : archetypes) a.destroy();
+    }
+
+    [[nodiscard]] auto has(ArchetypeAtlasKey key) const -> bool { return key < archetypes.size(); }
+    [[nodiscard]] auto get(ArchetypeAtlasKey key) const -> const Archetype * { return &archetypes[key]; }
+    [[nodiscard]] auto get(ArchetypeAtlasKey key) -> Archetype * { return &archetypes[key]; }
+
+    auto new_archetype(const Signature *signature) -> size_t {
+        archetypes.push_back(Archetype::make(this->component_size_align_atlas_ref, signature));
+        return archetypes.size() - 1;
+    }
+};
 
 } // namespace cactus

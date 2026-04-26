@@ -16,7 +16,7 @@ int main() {
     _ = sm.push(40);
     _ = sm.push(50);
 
-    std::cout << sm.get(_).value_or(-1) << "\n";
+    std::cout << sm.get(_).value_or(nullptr) << "\n";
 
     for (auto x : sm) { std::cout << x << " "; }
     std::cout << "\n";
