@@ -1,5 +1,5 @@
 module;
-export module cactus.core.strat.slotmap;
+export module cactus.core.strat:slotmap;
 
 import std;
 
@@ -14,11 +14,8 @@ export struct SlotMapKey {
 
 export template <typename T, typename Alloc = std::allocator<T>> struct SlotMap {
     using AllocTraits = std::allocator_traits<Alloc>;
-
-    using SlotAlloc = AllocTraits::template rebind_alloc<SlotMapKey>;
-
-    using SizeAlloc = AllocTraits::template rebind_alloc<size_t>;
-    using SizeAllocTraits = std::allocator_traits<SizeAlloc>;
+    using SlotAlloc = typename AllocTraits::template rebind_alloc<SlotMapKey>;
+    using SlotVector = std::vector<SlotMapKey, SlotAlloc>;
 
     using iterator = T *;
     using const_iterator = const T *;
@@ -28,37 +25,50 @@ export template <typename T, typename Alloc = std::allocator<T>> struct SlotMap 
     size_t len;
     size_t cap;
 
-    std::vector<SlotMapKey, typename AllocTraits::template rebind_alloc<SlotMapKey>> slots;
+    SlotVector slots;
     size_t next_slot_index;
 
-    Alloc allocator;
-    SizeAlloc size_allocator;
-
     [[nodiscard]] static auto make(size_t cap = 0) -> SlotMap {
-        Alloc allocator = {};
-        SizeAlloc size_allocator = {};
+        SlotVector slots{};
 
         T *data_raw = nullptr;
         size_t *data_slot_index_raw = nullptr;
         if (cap != 0) {
-            data_raw = AllocTraits::allocate(allocator, cap * sizeof(T));
-            data_slot_index_raw = SizeAllocTraits::allocate(size_allocator, cap * sizeof(size_t));
+            auto slot_alloc = slots.get_allocator();
+            using TAlloc = typename std::allocator_traits<SlotAlloc>::template rebind_alloc<T>;
+            using SizeAlloc = typename std::allocator_traits<SlotAlloc>::template rebind_alloc<size_t>;
+
+            TAlloc t_alloc(slot_alloc);
+            SizeAlloc size_alloc(slot_alloc);
+
+            data_raw = std::allocator_traits<TAlloc>::allocate(t_alloc, cap);
+            data_slot_index_raw = std::allocator_traits<SizeAlloc>::allocate(size_alloc, cap);
         }
 
-        return SlotMap{.data_raw = data_raw,
-                       .data_slot_index_raw = data_slot_index_raw,
-                       .len = 0,
-                       .cap = cap,
-                       .slots = {},
-                       .next_slot_index = 0,
-                       .allocator = allocator,
-                       .size_allocator = size_allocator};
+        return SlotMap{
+            .data_raw = data_raw,
+            .data_slot_index_raw = data_slot_index_raw,
+            .len = 0,
+            .cap = cap,
+            .slots = std::move(slots),
+            .next_slot_index = 0,
+        };
     }
 
     ~SlotMap() {
-        if (this->data_raw != nullptr) AllocTraits::deallocate(this->allocator, this->data_raw, this->cap);
-        if (this->data_slot_index_raw != nullptr)
-            SizeAllocTraits::deallocate(this->size_allocator, this->data_slot_index_raw, this->cap);
+        auto slot_alloc = this->slots.get_allocator();
+
+        if (this->data_raw != nullptr) {
+            using TAlloc = typename std::allocator_traits<SlotAlloc>::template rebind_alloc<T>;
+            TAlloc t_alloc(slot_alloc);
+            std::allocator_traits<TAlloc>::deallocate(t_alloc, this->data_raw, this->cap);
+        }
+
+        if (this->data_slot_index_raw != nullptr) {
+            using SizeAlloc = typename std::allocator_traits<SlotAlloc>::template rebind_alloc<size_t>;
+            SizeAlloc size_alloc(slot_alloc);
+            std::allocator_traits<SizeAlloc>::deallocate(size_alloc, this->data_slot_index_raw, this->cap);
+        }
     }
 
     [[nodiscard]] auto push(const T &val) -> SlotMapKey {
@@ -166,21 +176,27 @@ private:
     auto handle_reserve_data(size_t cap) {
         if (cap <= this->cap) return;
 
-        T *new_data_raw = AllocTraits::allocate(this->allocator, cap * sizeof(T));
-        size_t *new_data_slot_index_raw = SizeAllocTraits::allocate(this->size_allocator, cap * sizeof(size_t));
+        auto slot_alloc = this->slots.get_allocator();
+        using TAlloc = typename std::allocator_traits<SlotAlloc>::template rebind_alloc<T>;
+        using SizeAlloc = typename std::allocator_traits<SlotAlloc>::template rebind_alloc<size_t>;
+
+        TAlloc t_alloc(slot_alloc);
+        SizeAlloc size_alloc(slot_alloc);
+
+        T *new_data_raw = std::allocator_traits<TAlloc>::allocate(t_alloc, cap);
+        size_t *new_data_slot_index_raw = std::allocator_traits<SizeAlloc>::allocate(size_alloc, cap);
 
         if (this->data_raw != nullptr) {
             std::memcpy(new_data_raw, this->data_raw, this->len * sizeof(T));
-            AllocTraits::deallocate(this->allocator, this->data_raw, this->cap);
+            std::allocator_traits<TAlloc>::deallocate(t_alloc, this->data_raw, this->cap);
         }
         if (this->data_slot_index_raw != nullptr) {
             std::memcpy(new_data_slot_index_raw, this->data_slot_index_raw, this->len * sizeof(size_t));
-            SizeAllocTraits::deallocate(this->size_allocator, this->data_slot_index_raw, this->cap);
+            std::allocator_traits<SizeAlloc>::deallocate(size_alloc, this->data_slot_index_raw, this->cap);
         }
 
         this->data_raw = new_data_raw;
         this->data_slot_index_raw = new_data_slot_index_raw;
-
         this->cap = cap;
     }
 

@@ -1,5 +1,6 @@
 import std;
-import cactus.core.strat.slotmap;
+import cactus.core.strat;
+import raylib;
 
 int main() {
     auto sm = cactus::SlotMap<double>::make();

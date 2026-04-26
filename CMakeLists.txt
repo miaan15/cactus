@@ -31,19 +31,6 @@ else()
     message(WARNING "Platform: Unknown")
 endif()
 
-# Set vars
-set(VENDOR_DIR ${CMAKE_SOURCE_DIR}/vendor)
-set(MODS_DIR ${CMAKE_SOURCE_DIR}/mods)
-set(SRC_DIR "${CMAKE_SOURCE_DIR}/src")
-set(DEMO_DIR "${CMAKE_SOURCE_DIR}/demo")
-set(TEST_DIR "${CMAKE_SOURCE_DIR}/test")
-file(GLOB_RECURSE SRCS CONFIGURE_DEPENDS "${SRC_DIR}/*.cpp")
-
-if(USE_ASAN)
-    add_compile_options(-fsanitize=address -fno-omit-frame-pointer -g)
-    add_link_options(-fsanitize=address)
-endif()
-
 # Fetch
 message(STATUS "Running vendor fetch script...")
 set(FETCH_VENDORS_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/fetch_vendors.sh)
@@ -58,36 +45,33 @@ execute_process(
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
 )
 
-# Create precompiled modules
-macro(create_precompiled_mod target)
-    set(MOD_TARGET ${target}_MOD)
-    set(MOD_SOURCE "${MODS_DIR}/${target}/${target}.cppm")
+# Set vars
+set(VENDOR_DIR ${CMAKE_SOURCE_DIR}/vendor)
+set(MODS_DIR ${CMAKE_SOURCE_DIR}/mods)
+set(SRC_DIR ${CMAKE_SOURCE_DIR}/src)
+set(DEMO_DIR ${CMAKE_SOURCE_DIR}/demo)
+set(TEST_DIR ${CMAKE_SOURCE_DIR}/test)
+file(GLOB_RECURSE SRCS CONFIGURE_DEPENDS "${SRC_DIR}/*.cpp")
+set(INC_DIRS
+    ${VENDOR_DIR}/raylib/src
+    ${VENDOR_DIR}/spdlog/include
+)
 
-    if(NOT EXISTS "${MOD_SOURCE}")
-        message(FATAL_ERROR "Module file not found: ${MOD_SOURCE}")
-    endif()
-
-    add_library(${MOD_TARGET} STATIC)
-    target_sources(${MOD_TARGET} PUBLIC FILE_SET CXX_MODULES FILES "${MOD_SOURCE}")
-
-    set_target_properties(${MOD_TARGET} PROPERTIES
-        CXX_STANDARD 23
-        CXX_STANDARD_REQUIRED ON
-        CXX_EXTENSIONS OFF
-    )
-
-    target_compile_options(${MOD_TARGET} PUBLIC -stdlib=libc++)
-    target_link_options(${MOD_TARGET} PUBLIC -stdlib=libc++)
-endmacro()
-
+if(USE_ASAN)
+    add_compile_options(-fsanitize=address -fno-omit-frame-pointer -g)
+    add_link_options(-fsanitize=address)
+endif()
 
 # Set modules
-set(MOD_SOURCES ${SRCS})
-
-create_precompiled_mod(std)
-list(APPEND MOD_LIBS ${MOD_TARGET})
+set(MOD_SOURCES 
+    ${SRCS}
+    ${MODS_DIR}/std/std.cppm
+    ${MODS_DIR}/raylib/raylib.cppm
+    ${VENDOR_DIR}/glm/glm/glm.cppm
+    ${MODS_DIR}/spdlog/spdlog.cppm
+)
 
 # Finalize
 add_executable(cactus_demo_main ${DEMO_DIR}/main.cpp)
 target_sources(cactus_demo_main PRIVATE FILE_SET CXX_MODULES FILES ${MOD_SOURCES})
-target_link_libraries(cactus_demo_main PRIVATE ${MOD_LIBS})
+target_include_directories(cactus_demo_main PRIVATE ${INC_DIRS})
