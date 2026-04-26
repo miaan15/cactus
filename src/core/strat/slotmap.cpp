@@ -55,7 +55,7 @@ export template <typename T, typename Alloc = std::allocator<T>> struct SlotMap 
         };
     }
 
-    ~SlotMap() {
+    auto destroy() const {
         auto slot_alloc = this->slots.get_allocator();
 
         if (this->data_raw != nullptr) {
@@ -118,7 +118,7 @@ export template <typename T, typename Alloc = std::allocator<T>> struct SlotMap 
         return true;
     }
 
-    [[nodiscard]] auto get(const SlotMapKey &key) -> std::optional<T> {
+    [[nodiscard]] auto get(const SlotMapKey &key) const -> std::optional<const T> {
         size_t index = key.index;
         if (index >= this->slots.size()) return {};
 
