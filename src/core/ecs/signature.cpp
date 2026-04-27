@@ -52,7 +52,7 @@ export struct Signature {
         std::type_index *new_data_raw = (std::type_index *)std::malloc(new_len * sizeof(std::type_index));
         bool flag = 0;
         for (size_t i = 0; i < this->len; i++) {
-            if (component < this->data_raw[i]) {
+            if (!flag && component < this->data_raw[i]) {
                 new_data_raw[i] = component;
                 flag = 1;
             }
@@ -108,7 +108,7 @@ export struct Signature {
 
         bool flag = 0;
         for (size_t i = 0; i < this->len; i++) {
-            if (component == this->data_raw[i]) {
+            if (!flag && component == this->data_raw[i]) {
                 flag = 1;
                 continue;
             }

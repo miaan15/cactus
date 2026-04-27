@@ -158,7 +158,7 @@ export struct Archetype {
         size_t c_size = size_align_data_opt->size;
         size_t c_align = size_align_data_opt->align;
 
-        res = align_up(res, c_align) + c_size;
+        res = align_up(res, c_align);
     }
 
     return res;

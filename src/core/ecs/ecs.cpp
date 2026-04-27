@@ -62,6 +62,32 @@ export struct World {
 
     [[nodiscard]] auto has(const Entity &entity) const -> bool { return this->entities_data.has(entity); }
 
+    auto log(const Entity &entity) -> std::string {
+        std::string s = "";
+
+        s += "entity[" + std::to_string(entity.index) + ":" + std::to_string(entity.gen) + "] :: ";
+
+        const EntityData &entity_data = *entities_data.get(entity).value();
+        const Signature *entity_signature = this->signature_atlas.get(entity_data.signature_key).value();
+
+        s += "signature: [";
+        for (size_t i = 0; i < entity_signature->len; i++) {
+            std::type_index t = entity_signature->data_raw[i];
+            s += std::string(t.name()) + ", ";
+        }
+        s += "] :: ";
+
+        ArchetypeAtlasKey entity_archetype_key = this->signature_to_archetype_key_map.at(entity_data.signature_key);
+        const Archetype *entity_archetype = this->archetype_atlas.get(entity_archetype_key).value();
+
+        s += "row data: [";
+        const char *row_ptr = (const char *)entity_archetype->get_row_ptr(entity_data.archetype_row_index).value();
+        for (size_t i = 0; i < entity_archetype->row_size; i++) { s += std::format("{:02x} ", row_ptr[i]); }
+        s += "]";
+
+        return s;
+    }
+
     template <typename T> [[nodiscard]] auto get_component(const Entity &entity) const -> std::optional<const T *> {
         if (!this->has(entity)) return {};
         if (!this->has_component<T>(entity)) return {};
@@ -104,6 +130,8 @@ export struct World {
 
         const EntityData &entity_data = *entities_data.get(entity).value();
 
+        if (entity_data.signature_key == EMPTY_SIGNATURE_KEY) return false;
+
         const Signature *entity_signature = this->signature_atlas.get(entity_data.signature_key).value();
 
         return entity_signature->has(component);
@@ -134,6 +162,7 @@ export struct World {
             Archetype *new_archetype = this->archetype_atlas.get(new_archetype_key).value();
             size_t new_row_index = new_archetype->append();
 
+            new_archetype = this->archetype_atlas.get(new_archetype_key).value();
             *(T *)new_archetype->get_component_ptr(new_row_index, component) = val;
 
             entity_data.signature_key = new_signature_key;
@@ -171,6 +200,7 @@ export struct World {
         new_archetype = this->archetype_atlas.get(new_archetype_key).value();
 
         Archetype *entity_archetype = this->archetype_atlas.get(entity_archetype_key).value();
+        new_archetype = this->archetype_atlas.get(new_archetype_key).value();
         this->handle_copy_row(entity_archetype, entity_data.archetype_row_index, new_archetype, new_row_index);
         *(T *)new_archetype->get_component_ptr(new_row_index, component) = val;
 
@@ -222,6 +252,7 @@ export struct World {
         size_t new_row_index = new_archetype->append();
 
         Archetype *entity_archetype = this->archetype_atlas.get(entity_archetype_key).value();
+        new_archetype = this->archetype_atlas.get(new_archetype_key).value();
         this->handle_copy_row(entity_archetype, entity_data.archetype_row_index, new_archetype, new_row_index);
 
         entity_archetype = this->archetype_atlas.get(entity_archetype_key).value();
@@ -253,21 +284,21 @@ private:
             ComponentSizeAlignData to_t_data = this->component_size_align_atlas.get_size_align(to_t).value();
 
             if (from_t == to_t) {
-                from_row_offset = align_up(from_row_offset, to_t_data.align);
+                from_row_offset = align_up(from_row_offset, from_t_data.align);
                 to_row_offset = align_up(to_row_offset, to_t_data.align);
 
                 std::memcpy(to_row_ptr + to_row_offset, from_row_ptr + from_row_offset, from_t_data.size);
 
                 from_row_offset += from_t_data.size;
-                to_row_offset = to_t_data.size;
+                to_row_offset += to_t_data.size;
                 ++i;
                 ++j;
             } else if (from_t < to_t) {
+                from_row_offset = align_up(from_row_offset, from_t_data.align) + from_t_data.size;
+                ++i;
+            } else {
                 to_row_offset = align_up(to_row_offset, to_t_data.align) + to_t_data.size;
                 ++j;
-            } else {
-                from_row_offset = align_up(from_row_offset, to_t_data.align) + from_t_data.size;
-                ++i;
             }
         }
     }

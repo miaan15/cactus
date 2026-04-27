@@ -1,5 +1,5 @@
 # Only support Clang and libc++ (for now, till all support c++ mods) // TODO
-cmake_minimum_required(VERSION 3.28)
+cmake_minimum_required(VERSION 3.29)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/require_clang.cmake)
 
