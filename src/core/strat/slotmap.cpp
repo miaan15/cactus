@@ -118,16 +118,27 @@ export template <typename T, typename Alloc = std::allocator<T>> struct SlotMap 
         return true;
     }
 
-    [[nodiscard]] auto get(const SlotMapKey &key) const -> std::optional<const T *> {
+    auto set(const SlotMapKey &key, const T &val) -> bool {
+        size_t index = key.index;
+        if (index >= this->slots.size()) return false;
+
+        SlotMapKey slot = this->slots[index];
+        if (key.gen != slot.gen) return false;
+
+        this->data_raw[slot.index] = val;
+        return true;
+    }
+
+    [[nodiscard]] auto get(const SlotMapKey &key) const -> std::optional<T> {
         size_t index = key.index;
         if (index >= this->slots.size()) return {};
 
         SlotMapKey slot = this->slots[index];
         if (key.gen != slot.gen) return {};
 
-        return &this->data_raw[slot.index];
+        return this->data_raw[slot.index];
     }
-    [[nodiscard]] auto get(const SlotMapKey &key) -> std::optional<T *> {
+    [[nodiscard]] auto get_ptr(const SlotMapKey &key) -> std::optional<T *> {
         size_t index = key.index;
         if (index >= this->slots.size()) return {};
 

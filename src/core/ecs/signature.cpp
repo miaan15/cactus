@@ -214,9 +214,9 @@ export struct SignatureAtlas {
     }
 
     [[nodiscard]] auto has(SignatureAtlasKey key) const -> bool { return key < signatures.size(); }
-    [[nodiscard]] auto get(SignatureAtlasKey key) const -> std::optional<const Signature *> {
+    [[nodiscard]] auto get(SignatureAtlasKey key) const -> std::optional<Signature> {
         if (key >= signatures.size()) return {};
-        return &signatures[key];
+        return signatures[key];
     }
 
     auto new_signature(Signature &&signature) -> size_t {
@@ -243,11 +243,11 @@ export struct SignatureAtlas {
             return new_key;
         }
 
-        const Signature *cur_signature = this->get(key).value();
+        Signature cur_signature = this->get(key).value();
 
-        if (cur_signature->has(component)) return {};
+        if (cur_signature.has(component)) return {};
 
-        Signature new_signature = cur_signature->clone();
+        Signature new_signature = cur_signature.clone();
         new_signature.push(component);
 
         auto existed_new_key_it = this->signature_to_key_map.find(new_signature);
@@ -277,11 +277,11 @@ export struct SignatureAtlas {
             if (to_key_it != this->transitions_by_remove.end()) return to_key_it->second;
         }
 
-        const Signature *cur_signature = this->get(key).value();
+        Signature cur_signature = this->get(key).value();
 
-        if (!cur_signature->has(component)) return {};
+        if (!cur_signature.has(component)) return {};
 
-        if (cur_signature->len == 1) {
+        if (cur_signature.len == 1) {
             SignatureAtlasKey new_key = EMPTY_SIGNATURE_KEY;
 
             transitions_by_remove[SignatureTransition{key, component}] = new_key;
@@ -289,7 +289,7 @@ export struct SignatureAtlas {
             return new_key;
         }
 
-        Signature new_signature = cur_signature->clone();
+        Signature new_signature = cur_signature.clone();
         new_signature.remove(component);
 
         auto existed_new_key_it = this->signature_to_key_map.find(new_signature);
