@@ -214,8 +214,8 @@ export struct SignatureAtlas {
     }
 
     [[nodiscard]] auto has(SignatureAtlasKey key) const -> bool { return key < signatures.size(); }
-    [[nodiscard]] auto get(SignatureAtlasKey key) const -> std::optional<Signature> {
-        if (key >= signatures.size()) return {};
+    [[nodiscard]] auto get(SignatureAtlasKey key) const -> Signature {
+        assert(key < signatures.size());
         return signatures[key];
     }
 
@@ -224,9 +224,8 @@ export struct SignatureAtlas {
         return signatures.size() - 1;
     }
 
-    [[nodiscard]] auto get_key_by_add_component(SignatureAtlasKey key, std::type_index component)
-        -> std::optional<SignatureAtlasKey> {
-        if (key != EMPTY_SIGNATURE_KEY && !this->has(key)) return {};
+    [[nodiscard]] auto get_key_by_add_component(SignatureAtlasKey key, std::type_index component) -> SignatureAtlasKey {
+        assert(key == EMPTY_SIGNATURE_KEY || this->has(key));
 
         {
             auto to_key_it = this->transitions_by_add.find(SignatureTransition{key, component});
@@ -239,13 +238,14 @@ export struct SignatureAtlas {
             SignatureAtlasKey new_key = this->new_signature(std::move(new_signature));
 
             transitions_by_add[SignatureTransition{key, component}] = new_key;
+            transitions_by_remove[SignatureTransition{new_key, component}] = key;
 
             return new_key;
         }
 
-        Signature cur_signature = this->get(key).value();
+        Signature cur_signature = this->get(key);
 
-        if (cur_signature.has(component)) return {};
+        assert(!cur_signature.has(component));
 
         Signature new_signature = cur_signature.clone();
         new_signature.push(component);
@@ -257,6 +257,7 @@ export struct SignatureAtlas {
             SignatureAtlasKey new_key = existed_new_key_it->second;
 
             transitions_by_add[SignatureTransition{key, component}] = new_key;
+            transitions_by_remove[SignatureTransition{new_key, component}] = key;
 
             return new_key;
         }
@@ -264,27 +265,29 @@ export struct SignatureAtlas {
         SignatureAtlasKey new_key = this->new_signature(std::move(new_signature));
 
         transitions_by_add[SignatureTransition{key, component}] = new_key;
+        transitions_by_remove[SignatureTransition{new_key, component}] = key;
 
         return new_key;
     }
 
     [[nodiscard]] auto get_key_by_remove_component(SignatureAtlasKey key, std::type_index component)
-        -> std::optional<SignatureAtlasKey> {
-        if (key == EMPTY_SIGNATURE_KEY || !this->has(key)) return {};
+        -> SignatureAtlasKey {
+        assert(key != EMPTY_SIGNATURE_KEY && this->has(key));
 
         {
             auto to_key_it = this->transitions_by_remove.find(SignatureTransition{key, component});
             if (to_key_it != this->transitions_by_remove.end()) return to_key_it->second;
         }
 
-        Signature cur_signature = this->get(key).value();
+        Signature cur_signature = this->get(key);
 
-        if (!cur_signature.has(component)) return {};
+        assert(cur_signature.has(component));
 
         if (cur_signature.len == 1) {
             SignatureAtlasKey new_key = EMPTY_SIGNATURE_KEY;
 
             transitions_by_remove[SignatureTransition{key, component}] = new_key;
+            transitions_by_add[SignatureTransition{new_key, component}] = key;
 
             return new_key;
         }
@@ -299,6 +302,7 @@ export struct SignatureAtlas {
             SignatureAtlasKey new_key = existed_new_key_it->second;
 
             transitions_by_remove[SignatureTransition{key, component}] = new_key;
+            transitions_by_add[SignatureTransition{new_key, component}] = key;
 
             return new_key;
         }
@@ -306,6 +310,7 @@ export struct SignatureAtlas {
         SignatureAtlasKey new_key = this->new_signature(std::move(new_signature));
 
         transitions_by_remove[SignatureTransition{key, component}] = new_key;
+        transitions_by_add[SignatureTransition{new_key, component}] = key;
 
         return new_key;
     }

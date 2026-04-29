@@ -62,7 +62,7 @@ export struct World {
 
     [[nodiscard]] auto has(const Entity &entity) const -> bool { return this->entities_data.has(entity); }
 
-    template <typename T> [[nodiscard]] auto get_component(const Entity &entity) const -> std::optional<const T *> {
+    template <typename T> [[nodiscard]] auto get_component(const Entity &entity) const -> std::optional<T> {
         if (!this->has(entity)) return {};
         if (!this->has_component<T>(entity)) return {};
 
@@ -70,16 +70,16 @@ export struct World {
 
         const EntityData entity_data = entities_data.get(entity).value();
 
-        const Signature entity_signature = this->signature_atlas.get(entity_data.signature_key).value();
+        const Signature entity_signature = this->signature_atlas.get(entity_data.signature_key);
         if (!entity_signature.has(component)) return {};
 
         assert(this->signature_to_archetype_key_map.contains(entity_data.signature_key));
         ArchetypeAtlasKey entity_archetype_key = this->signature_to_archetype_key_map.at(entity_data.signature_key);
 
-        const Archetype entity_archetype = this->archetype_atlas.get(entity_archetype_key).value();
-        return (const T *)entity_archetype.get_component_ptr(entity_data.archetype_row_index, component);
+        const Archetype entity_archetype = this->archetype_atlas.get(entity_archetype_key);
+        return *(T *)entity_archetype.get_component_ptr(entity_data.archetype_row_index, component);
     }
-    template <typename T> [[nodiscard]] auto get_component(const Entity &entity) -> std::optional<T *> {
+    template <typename T> [[nodiscard]] auto get_component_ptr(const Entity &entity) -> std::optional<T *> {
         if (!this->has(entity)) return {};
         if (!this->has_component<T>(entity)) return {};
 
@@ -87,13 +87,13 @@ export struct World {
 
         const EntityData entity_data = entities_data.get(entity).value();
 
-        const Signature entity_signature = this->signature_atlas.get(entity_data.signature_key).value();
+        const Signature entity_signature = this->signature_atlas.get(entity_data.signature_key);
         if (!entity_signature.has(component)) return {};
 
         assert(this->signature_to_archetype_key_map.contains(entity_data.signature_key));
         ArchetypeAtlasKey entity_archetype_key = this->signature_to_archetype_key_map.at(entity_data.signature_key);
 
-        const Archetype entity_archetype = this->archetype_atlas.get(entity_archetype_key).value();
+        const Archetype entity_archetype = this->archetype_atlas.get(entity_archetype_key);
         return (T *)entity_archetype.get_component_ptr(entity_data.archetype_row_index, component);
     }
 
@@ -106,9 +106,29 @@ export struct World {
 
         if (entity_data.signature_key == EMPTY_SIGNATURE_KEY) return false;
 
-        const Signature entity_signature = this->signature_atlas.get(entity_data.signature_key).value();
+        const Signature entity_signature = this->signature_atlas.get(entity_data.signature_key);
 
         return entity_signature.has(component);
+    }
+
+    template <typename T> auto set_component(const Entity &entity, const T &val) -> bool {
+        if (!this->has(entity)) return false;
+        if (!this->has_component<T>(entity)) return false;
+
+        std::type_index component = std::type_index(typeid(T));
+
+        const EntityData entity_data = entities_data.get(entity).value();
+
+        const Signature entity_signature = this->signature_atlas.get(entity_data.signature_key);
+        if (!entity_signature.has(component)) return false;
+
+        assert(this->signature_to_archetype_key_map.contains(entity_data.signature_key));
+        ArchetypeAtlasKey entity_archetype_key = this->signature_to_archetype_key_map.at(entity_data.signature_key);
+
+        const Archetype entity_archetype = this->archetype_atlas.get(entity_archetype_key);
+        *(T *)entity_archetype.get_component_ptr(entity_data.archetype_row_index, component) = val;
+
+        return true;
     }
 
     template <typename T> auto add_component(const Entity &entity, const T &val) -> bool {
@@ -122,8 +142,8 @@ export struct World {
 
         if (entity_data.signature_key == EMPTY_SIGNATURE_KEY) {
             SignatureAtlasKey new_signature_key =
-                this->signature_atlas.get_key_by_add_component(entity_data.signature_key, component).value();
-            const Signature new_signature = this->signature_atlas.get(new_signature_key).value();
+                this->signature_atlas.get_key_by_add_component(entity_data.signature_key, component);
+            const Signature new_signature = this->signature_atlas.get(new_signature_key);
 
             auto new_archetype_key_it = this->signature_to_archetype_key_map.find(new_signature_key);
             ArchetypeAtlasKey new_archetype_key = new_archetype_key_it != this->signature_to_archetype_key_map.end()
@@ -136,7 +156,7 @@ export struct World {
             size_t new_row_index = this->archetype_atlas.append(new_archetype_key);
             assert(new_row_index != -1);
 
-            const Archetype new_archetype = this->archetype_atlas.get(new_archetype_key).value();
+            const Archetype new_archetype = this->archetype_atlas.get(new_archetype_key);
             *(T *)new_archetype.get_component_ptr(new_row_index, component) = val;
 
             entities_data.set(entity, EntityData{.signature_key = new_signature_key, .archetype_row_index = new_row_index});
@@ -144,21 +164,21 @@ export struct World {
             return true;
         }
 
-        const Signature entity_signature = this->signature_atlas.get(entity_data.signature_key).value();
+        const Signature entity_signature = this->signature_atlas.get(entity_data.signature_key);
 
         assert(this->signature_to_archetype_key_map.contains(entity_data.signature_key));
         ArchetypeAtlasKey entity_archetype_key = this->signature_to_archetype_key_map.at(entity_data.signature_key);
 
         if (entity_signature.has(component)) {
-            const Archetype entity_archetype = this->archetype_atlas.get(entity_archetype_key).value();
+            const Archetype entity_archetype = this->archetype_atlas.get(entity_archetype_key);
             *(T *)entity_archetype.get_component_ptr(entity_data.archetype_row_index, component) = val;
 
             return false;
         }
 
         SignatureAtlasKey new_signature_key =
-            this->signature_atlas.get_key_by_add_component(entity_data.signature_key, component).value();
-        const Signature new_signature = this->signature_atlas.get(new_signature_key).value();
+            this->signature_atlas.get_key_by_add_component(entity_data.signature_key, component);
+        const Signature new_signature = this->signature_atlas.get(new_signature_key);
 
         auto new_archetype_key_it = this->signature_to_archetype_key_map.find(new_signature_key);
         ArchetypeAtlasKey new_archetype_key = new_archetype_key_it != this->signature_to_archetype_key_map.end()
@@ -171,8 +191,8 @@ export struct World {
         size_t new_row_index = this->archetype_atlas.append(new_archetype_key);
         assert(new_row_index != -1);
 
-        const Archetype entity_archetype = this->archetype_atlas.get(entity_archetype_key).value();
-        const Archetype new_archetype = this->archetype_atlas.get(new_archetype_key).value();
+        const Archetype entity_archetype = this->archetype_atlas.get(entity_archetype_key);
+        const Archetype new_archetype = this->archetype_atlas.get(new_archetype_key);
 
         this->handle_copy_row(entity_archetype, entity_data.archetype_row_index, new_archetype, new_row_index);
 
@@ -191,7 +211,7 @@ export struct World {
 
         const EntityData entity_data = entities_data.get(entity).value();
 
-        const Signature entity_signature = this->signature_atlas.get(entity_data.signature_key).value();
+        const Signature entity_signature = this->signature_atlas.get(entity_data.signature_key);
 
         assert(this->signature_to_archetype_key_map.contains(entity_data.signature_key));
         ArchetypeAtlasKey entity_archetype_key = this->signature_to_archetype_key_map.at(entity_data.signature_key);
@@ -199,8 +219,8 @@ export struct World {
         if (!entity_signature.has(component)) return false;
 
         SignatureAtlasKey new_signature_key =
-            this->signature_atlas.get_key_by_remove_component(entity_data.signature_key, component).value();
-        const Signature new_signature = this->signature_atlas.get(new_signature_key).value();
+            this->signature_atlas.get_key_by_remove_component(entity_data.signature_key, component);
+        const Signature new_signature = this->signature_atlas.get(new_signature_key);
 
         if (new_signature_key == EMPTY_SIGNATURE_KEY) {
             this->archetype_atlas.remove(entity_archetype_key, entity_data.archetype_row_index);
@@ -221,8 +241,8 @@ export struct World {
         size_t new_row_index = this->archetype_atlas.append(new_archetype_key);
         assert(new_row_index != -1);
 
-        const Archetype entity_archetype = this->archetype_atlas.get(entity_archetype_key).value();
-        const Archetype new_archetype = this->archetype_atlas.get(new_archetype_key).value();
+        const Archetype entity_archetype = this->archetype_atlas.get(entity_archetype_key);
+        const Archetype new_archetype = this->archetype_atlas.get(new_archetype_key);
 
         this->handle_copy_row(entity_archetype, entity_data.archetype_row_index, new_archetype, new_row_index);
 
@@ -236,11 +256,11 @@ export struct World {
 private:
     auto handle_copy_row(const Archetype &from_archetype, size_t from_row_index, const Archetype &to_archetype,
                          size_t to_row_index) -> void {
-        const Signature from_signature = this->signature_atlas.get(from_archetype.signature_key).value();
-        const Signature to_signature = this->signature_atlas.get(to_archetype.signature_key).value();
+        const Signature from_signature = this->signature_atlas.get(from_archetype.signature_key);
+        const Signature to_signature = this->signature_atlas.get(to_archetype.signature_key);
 
-        char *from_row_ptr = (char *)from_archetype.get_row_ptr(from_row_index).value();
-        char *to_row_ptr = (char *)to_archetype.get_row_ptr(to_row_index).value();
+        char *from_row_ptr = (char *)from_archetype.get_row_ptr(from_row_index);
+        char *to_row_ptr = (char *)to_archetype.get_row_ptr(to_row_index);
 
         size_t from_row_offset = 0, to_row_offset = 0;
 
@@ -249,8 +269,8 @@ private:
             std::type_index from_t = from_signature.get(i).value();
             std::type_index to_t = to_signature.get(j).value();
 
-            ComponentSizeAlignData from_t_data = this->component_size_align_atlas.get_size_align(from_t).value();
-            ComponentSizeAlignData to_t_data = this->component_size_align_atlas.get_size_align(to_t).value();
+            ComponentSizeAlignData from_t_data = this->component_size_align_atlas.get_size_align(from_t);
+            ComponentSizeAlignData to_t_data = this->component_size_align_atlas.get_size_align(to_t);
 
             if (from_t == to_t) {
                 from_row_offset = align_up(from_row_offset, from_t_data.align);

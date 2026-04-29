@@ -81,28 +81,27 @@ export struct Archetype {
         return true;
     }
 
-    [[nodiscard]] auto get_row_ptr(size_t index) const -> std::optional<const void *> {
-        if (index >= this->len) return {};
+    [[nodiscard]] auto get_row_ptr(size_t index) const -> const void * {
+        assert(index < this->len);
         return this->table_raw + index * this->row_size;
     }
-    [[nodiscard]] auto get_row_ptr(size_t index) -> std::optional<void *> {
-        if (index >= this->len) return {};
+    [[nodiscard]] auto get_row_ptr(size_t index) -> void * {
+        assert(index < this->len);
         return this->table_raw + index * this->row_size;
     }
-    [[nodiscard]] auto get_component_row_offset(std::type_index component) const -> std::optional<size_t> {
-        Signature signature = signature_atlas_ref->get(signature_key).value();
-
-        if (!signature.has(component)) return {};
+    [[nodiscard]] auto get_component_row_offset(std::type_index component) const -> size_t {
+        Signature signature = signature_atlas_ref->get(signature_key);
+        assert(signature.has(component));
 
         size_t res = 0;
 
         for (size_t i = 0; i < signature.len; i++) {
             std::type_index c = signature.data_raw[i];
 
-            auto size_align_data_opt = component_size_align_atlas_ref->get_size_align(c);
-            assert(size_align_data_opt.has_value());
-            size_t c_size = size_align_data_opt->size;
-            size_t c_align = size_align_data_opt->align;
+            assert(component_size_align_atlas_ref->has(c));
+            auto size_align_data = component_size_align_atlas_ref->get_size_align(c);
+            size_t c_size = size_align_data.size;
+            size_t c_align = size_align_data.align;
 
             if (c == component) {
                 res = align_up(res, c_align);
@@ -115,16 +114,18 @@ export struct Archetype {
         return res;
     }
     [[nodiscard]] auto get_component_ptr(size_t index, std::type_index component) const -> const void * {
-        auto row_opt = get_row_ptr(index);
-        auto offset_opt = get_component_row_offset(component);
-        if (!row_opt.has_value() || !offset_opt.has_value()) return {};
-        return (const char *)*row_opt + *offset_opt;
+        assert(index < this->len);
+        Signature signature = signature_atlas_ref->get(signature_key);
+        assert(signature.has(component));
+
+        return (const char *)this->get_row_ptr(index) + this->get_component_row_offset(component);
     }
     [[nodiscard]] auto get_component_ptr(size_t index, std::type_index component) -> void * {
-        auto row_opt = get_row_ptr(index);
-        auto offset_opt = get_component_row_offset(component);
-        if (!row_opt.has_value() || !offset_opt.has_value()) return {};
-        return (char *)*row_opt + *offset_opt;
+        assert(index < this->len);
+        Signature signature = signature_atlas_ref->get(signature_key);
+        assert(signature.has(component));
+
+        return (char *)this->get_row_ptr(index) + this->get_component_row_offset(component);
     }
 };
 
@@ -135,17 +136,17 @@ export struct Archetype {
 
 [[nodiscard]] auto handle_cal_row_size(ComponentSizeAlignAtlas *component_size_align_atlas_ref,
                                        SignatureAtlas *signature_atlas_ref, SignatureAtlasKey signature_key) -> size_t {
-    Signature signature = signature_atlas_ref->get(signature_key).value();
+    Signature signature = signature_atlas_ref->get(signature_key);
 
     size_t res = 0;
 
     for (size_t i = 0; i < signature.len; i++) {
         std::type_index c = signature.data_raw[i];
 
-        auto size_align_data_opt = component_size_align_atlas_ref->get_size_align(c);
-        assert(size_align_data_opt.has_value());
-        size_t c_size = size_align_data_opt->size;
-        size_t c_align = size_align_data_opt->align;
+        assert(component_size_align_atlas_ref->has(c));
+        auto size_align_data = component_size_align_atlas_ref->get_size_align(c);
+        size_t c_size = size_align_data.size;
+        size_t c_align = size_align_data.align;
 
         res = align_up(res, c_align) + c_size;
     }
@@ -153,10 +154,9 @@ export struct Archetype {
     if (signature.len > 1) {
         std::type_index c = signature.data_raw[0];
 
-        auto size_align_data_opt = component_size_align_atlas_ref->get_size_align(c);
-        assert(size_align_data_opt.has_value());
-        size_t c_size = size_align_data_opt->size;
-        size_t c_align = size_align_data_opt->align;
+        auto size_align_data = component_size_align_atlas_ref->get_size_align(c);
+        size_t c_size = size_align_data.size;
+        size_t c_align = size_align_data.align;
 
         res = align_up(res, c_align);
     }
@@ -183,12 +183,12 @@ export struct ArchetypeAtlas {
     }
 
     [[nodiscard]] auto has(ArchetypeAtlasKey key) const -> bool { return key < archetypes.size(); }
-    [[nodiscard]] auto get(ArchetypeAtlasKey key) const -> std::optional<Archetype> {
-        if (key >= archetypes.size()) return {};
+    [[nodiscard]] auto get(ArchetypeAtlasKey key) const -> Archetype {
+        assert(key < archetypes.size());
         return archetypes[key];
     }
-    [[nodiscard]] auto get_ptr(ArchetypeAtlasKey key) -> std::optional<Archetype *> {
-        if (key >= archetypes.size()) return {};
+    [[nodiscard]] auto get_ptr(ArchetypeAtlasKey key) -> Archetype * {
+        assert(key < archetypes.size());
         return &archetypes[key];
     }
 

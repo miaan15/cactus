@@ -1,5 +1,7 @@
 module;
 
+#include <cassert>
+
 export module cactus.core.ecs:component;
 
 import std;
@@ -27,15 +29,16 @@ export struct ComponentSizeAlignAtlas {
     template <typename T> [[nodiscard]] auto has() -> bool {
         return component_size_align_data.contains(std::type_index(typeid(T)));
     }
+    [[nodiscard]] auto has(std::type_index component) -> bool { return component_size_align_data.contains(component); }
 
-    template <typename T> [[nodiscard]] auto get_size_align() -> std::optional<ComponentSizeAlignData> {
+    template <typename T> [[nodiscard]] auto get_size_align() -> ComponentSizeAlignData {
         auto f = component_size_align_data.find(std::type_index(typeid(T)));
-        if (f == component_size_align_data.end()) return {};
+        assert(f != component_size_align_data.end());
         return f->second;
     }
-    [[nodiscard]] auto get_size_align(std::type_index component) -> std::optional<ComponentSizeAlignData> {
+    [[nodiscard]] auto get_size_align(std::type_index component) -> ComponentSizeAlignData {
         auto f = component_size_align_data.find(component);
-        if (f == component_size_align_data.end()) return {};
+        assert(f != component_size_align_data.end());
         return f->second;
     }
 };

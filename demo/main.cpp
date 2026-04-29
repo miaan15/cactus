@@ -153,37 +153,37 @@ int main() {
 
     // Test 3: Verify all component values
     std::cout << "\n[Test 3] Verifying component values\n";
-    assert(world.get_component<CompInt1>(e1).value()->value == 1);
-    assert(world.get_component<CompInt3>(e1).value()->value == 3);
-    assert(world.get_component<CompInt5>(e1).value()->value == 5);
+    assert(world.get_component<CompInt1>(e1).value().value == 1);
+    assert(world.get_component<CompInt3>(e1).value().value == 3);
+    assert(world.get_component<CompInt5>(e1).value().value == 5);
 
-    assert(world.get_component<CompFloat2>(e1).value()->value == 2.2f);
-    assert(world.get_component<CompFloat4>(e1).value()->value == 4.4f);
+    assert(world.get_component<CompFloat2>(e1).value().value == 2.2f);
+    assert(world.get_component<CompFloat4>(e1).value().value == 4.4f);
 
-    assert(world.get_component<CompDouble1>(e1).value()->value == 1.111);
-    assert(world.get_component<CompDouble3>(e1).value()->value == 3.333);
+    assert(world.get_component<CompDouble1>(e1).value().value == 1.111);
+    assert(world.get_component<CompDouble3>(e1).value().value == 3.333);
 
-    assert(world.get_component<CompBool1>(e1).value()->value == true);
-    assert(world.get_component<CompBool2>(e1).value()->value == false);
+    assert(world.get_component<CompBool1>(e1).value().value == true);
+    assert(world.get_component<CompBool2>(e1).value().value == false);
 
-    assert(world.get_component<CompChar1>(e1).value()->value == 'A');
-    assert(world.get_component<CompChar3>(e1).value()->value == 'C');
+    assert(world.get_component<CompChar1>(e1).value().value == 'A');
+    assert(world.get_component<CompChar3>(e1).value().value == 'C');
 
-    assert(world.get_component<CompShort2>(e1).value()->value == 200);
-    assert(world.get_component<CompLong1>(e1).value()->value == 1000000L);
-    assert(world.get_component<CompUInt2>(e1).value()->value == 84u);
+    assert(world.get_component<CompShort2>(e1).value().value == 200);
+    assert(world.get_component<CompLong1>(e1).value().value == 1000000L);
+    assert(world.get_component<CompUInt2>(e1).value().value == 84u);
 
     std::cout << "✓ All component values correct\n";
 
     // Test 4: Modify components and verify changes
     std::cout << "\n[Test 4] Modifying components\n";
-    world.get_component<CompInt1>(e1).value()->value = 999;
-    world.get_component<CompFloat3>(e1).value()->value = 99.9f;
-    world.get_component<CompChar2>(e1).value()->value = 'Z';
+    world.get_component_ptr<CompInt1>(e1).value()->value = 999;
+    world.get_component_ptr<CompFloat3>(e1).value()->value = 99.9f;
+    world.get_component_ptr<CompChar2>(e1).value()->value = 'Z';
 
-    assert(world.get_component<CompInt1>(e1).value()->value == 999);
-    assert(world.get_component<CompFloat3>(e1).value()->value == 99.9f);
-    assert(world.get_component<CompChar2>(e1).value()->value == 'Z');
+    assert(world.get_component<CompInt1>(e1).value().value == 999);
+    assert(world.get_component<CompFloat3>(e1).value().value == 99.9f);
+    assert(world.get_component<CompChar2>(e1).value().value == 'Z');
     std::cout << "✓ Component modifications work\n";
 
     // Test 5: Remove some components from the middle
@@ -199,11 +199,11 @@ int main() {
     assert(!world.has_component<CompDouble2>(e1));
 
     // Verify others still exist with correct values
-    assert(world.get_component<CompInt1>(e1).value()->value == 999);
-    assert(world.get_component<CompInt2>(e1).value()->value == 2);
-    assert(world.get_component<CompInt4>(e1).value()->value == 4);
-    assert(world.get_component<CompFloat3>(e1).value()->value == 99.9f);
-    assert(world.get_component<CompChar2>(e1).value()->value == 'Z');
+    assert(world.get_component<CompInt1>(e1).value().value == 999);
+    assert(world.get_component<CompInt2>(e1).value().value == 2);
+    assert(world.get_component<CompInt4>(e1).value().value == 4);
+    assert(world.get_component<CompFloat3>(e1).value().value == 99.9f);
+    assert(world.get_component<CompChar2>(e1).value().value == 'Z');
 
     std::cout << "✓ Removed 5 components, others preserved\n";
 
@@ -237,12 +237,12 @@ int main() {
     world.add_component(e1, CompFloat2{222.2f});
 
     assert(world.has_component<CompInt3>(e1));
-    assert(world.get_component<CompInt3>(e1).value()->value == 333);
-    assert(world.get_component<CompFloat2>(e1).value()->value == 222.2f);
+    assert(world.get_component<CompInt3>(e1).value().value == 333);
+    assert(world.get_component<CompFloat2>(e1).value().value == 222.2f);
 
     // Verify old values still intact
-    assert(world.get_component<CompInt1>(e1).value()->value == 999);
-    assert(world.get_component<CompChar2>(e1).value()->value == 'Z');
+    assert(world.get_component<CompInt1>(e1).value().value == 999);
+    assert(world.get_component<CompChar2>(e1).value().value == 'Z');
 
     std::cout << "✓ Re-added components work correctly\n";
 
