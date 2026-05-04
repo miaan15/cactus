@@ -42,11 +42,13 @@ export struct ComponentAtlas {
                 return (ComponentKey)-1;
             }
 
-            this->component_datas.push_back(ComponentData{.size = sizeof(T), .align = alignof(T)});
-
+            ComponentKey key = this->next_component_key;
             ++this->next_component_key;
 
-            return this->next_component_key - 1;
+            this->component_to_key_map[type] = key;
+            this->component_datas.push_back(ComponentData{.size = sizeof(T), .align = alignof(T)});
+
+            return key;
         }
 
         return key_it->second;

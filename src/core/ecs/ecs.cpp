@@ -82,7 +82,9 @@ export struct World {
         if (!this->has(entity)) return {};
         if (!this->has_component<T>(entity)) return {};
 
-        const ComponentKey component = this->component_atlas.get_key<T>();
+        std::optional<ComponentKey> component_opt = this->component_atlas.get_key_const<T>();
+        if (!component_opt.has_value()) return {};
+        const ComponentKey component = component_opt.value();
 
         const EntityData entity_data = this->entities_data.get(entity).value();
 
@@ -112,7 +114,9 @@ export struct World {
         if (!this->has(entity)) return false;
         if (!this->has_component<T>(entity)) return false;
 
-        const ComponentKey component = this->component_atlas.get_key<T>();
+        std::optional<ComponentKey> component_opt = this->component_atlas.get_key_const<T>();
+        if (!component_opt.has_value()) return false;
+        const ComponentKey component = component_opt.value();
 
         const EntityData entity_data = this->entities_data.get(entity).value();
 
@@ -200,7 +204,10 @@ export struct World {
 
     template <typename T> auto remove_component(const Entity &entity) -> bool {
         if (!this->has(entity)) return false;
-        const ComponentKey component = this->component_atlas.get_key<T>();
+
+        std::optional<ComponentKey> component_opt = this->component_atlas.get_key_const<T>();
+        if (!component_opt.has_value()) return false;
+        const ComponentKey component = component_opt.value();
 
         const EntityData entity_data = this->entities_data.get(entity).value();
 
