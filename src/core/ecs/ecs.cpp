@@ -15,6 +15,5 @@ export module cactus.core.ecs;
 // Signature is a blueprint of what component Entity/Archetype has
 
 export import :world;
-export import :views;
 
 import std;

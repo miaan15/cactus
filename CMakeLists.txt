@@ -74,6 +74,10 @@ set(LIBS
     # TODO
 )
 
+# Build libraries
+set(BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
+add_subdirectory(${VENDOR_DIR}/gtest)
+
 # Create target macros
 macro(create_target_test TEST_NAME TEST_SOURCE)
     add_executable(${TEST_NAME} ${TEST_SOURCE})
@@ -87,8 +91,6 @@ macro(create_target_test TEST_NAME TEST_SOURCE)
 endmacro()
 
 # Testing
-add_subdirectory(${VENDOR_DIR}/gtest)
-
 enable_testing()
 
 file(GLOB_RECURSE TEST_SRCS CONFIGURE_DEPENDS "${TEST_DIR}/*.cpp")

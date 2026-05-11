@@ -137,46 +137,4 @@ export struct Archetype {
     return res;
 }
 
-export using ArchetypeAtlasKey = size_t;
-
-export struct ArchetypeAtlas {
-    std::vector<Archetype> archetypes;
-    ComponentAtlas *component_atlas_ref;
-    SignatureAtlas *signature_atlas_ref;
-
-    [[nodiscard]] static auto make(ComponentAtlas *component_atlas_ref, SignatureAtlas *signature_atlas_ref) -> ArchetypeAtlas {
-        return ArchetypeAtlas{.archetypes = std::vector<Archetype>(),
-                              .component_atlas_ref = component_atlas_ref,
-                              .signature_atlas_ref = signature_atlas_ref};
-    }
-
-    auto destroy() const {
-        for (const auto &a : archetypes) a.destroy();
-    }
-
-    [[nodiscard]] auto has(ArchetypeAtlasKey key) const -> bool { return key < archetypes.size(); }
-    [[nodiscard]] auto get(ArchetypeAtlasKey key) const -> Archetype {
-        assert(key < archetypes.size());
-        return archetypes[key];
-    }
-    [[nodiscard]] auto get_ptr(ArchetypeAtlasKey key) -> Archetype * {
-        assert(key < archetypes.size());
-        return &archetypes[key];
-    }
-
-    auto archetype_make(SignatureAtlasKey signature_key) -> size_t {
-        archetypes.push_back(Archetype::make(component_atlas_ref, signature_atlas_ref, signature_key));
-        return archetypes.size() - 1;
-    }
-
-    auto archetype_append(ArchetypeAtlasKey key) -> size_t {
-        assert(key < archetypes.size());
-        return archetypes[key].append();
-    }
-    auto archetype_remove(ArchetypeAtlasKey key, size_t index) -> bool {
-        assert(key < archetypes.size());
-        return archetypes[key].remove(index);
-    }
-};
-
 } // namespace cactus

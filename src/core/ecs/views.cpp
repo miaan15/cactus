@@ -59,7 +59,7 @@ private:
 
 export template <typename... Ts> struct WorldView {
     const World *world_ref;
-    std::vector<ArchetypeAtlasKey> archetype_list;
+    std::vector<size_t> archetype_list;
 
     explicit WorldView(const World &world_ref) : world_ref(&world_ref), archetype_list() {
         Signature signature{};
@@ -89,7 +89,7 @@ export template <typename... Ts> struct WorldView {
         iterator(const WorldView &world_view, size_t archetype_list_index, size_t row_index)
             : source(&world_view), cur_archetype_list_index(archetype_list_index), cur_row_index(row_index),
               entity_view(world_view.world_ref, Entity{}, std::vector<void *>(sizeof...(Ts))) {
-            ArchetypeAtlasKey cur_archetype_key = world_view.archetype_list[cur_archetype_list_index];
+            size_t cur_archetype_key = world_view.archetype_list[cur_archetype_list_index];
         }
 
         auto operator*() const -> value_type { return entity_view.to_tuple(); }
