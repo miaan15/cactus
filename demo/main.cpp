@@ -4,6 +4,7 @@ import cactus.core.strat;
 import cactus.core.ecs;
 import std;
 import raylib;
+import glm;
 
 import cactus.core.ecs;
 
