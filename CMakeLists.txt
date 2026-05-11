@@ -55,6 +55,7 @@ file(GLOB_RECURSE SRCS CONFIGURE_DEPENDS "${SRC_DIR}/*.cpp")
 set(INC_DIRS
     ${VENDOR_DIR}/raylib/src
     ${VENDOR_DIR}/spdlog/include
+    ${VENDOR_DIR}/gtest/googletest/include
 )
 
 if(USE_ASAN)
@@ -63,15 +64,26 @@ if(USE_ASAN)
 endif()
 
 # Set modules
-set(MOD_SOURCES 
+set(MOD_SOURCES
     ${SRCS}
     ${MODS_DIR}/std/std.cppm
     ${MODS_DIR}/raylib/raylib.cppm
     ${VENDOR_DIR}/glm/glm/glm.cppm
     ${MODS_DIR}/spdlog/spdlog.cppm
+    ${MODS_DIR}/gtest/gtest.cppm
 )
 
 # Finalize
 add_executable(cactus_demo_main ${DEMO_DIR}/main.cpp)
 target_sources(cactus_demo_main PRIVATE FILE_SET CXX_MODULES FILES ${MOD_SOURCES})
 target_include_directories(cactus_demo_main PRIVATE ${INC_DIRS})
+
+# Testing
+enable_testing()
+
+file(GLOB_RECURSE TEST_SRCS CONFIGURE_DEPENDS "${TEST_DIR}/*.cpp")
+add_executable(cactus_test ${TEST_SRCS})
+target_sources(cactus_test PRIVATE FILE_SET CXX_MODULES FILES ${MOD_SOURCES})
+target_include_directories(cactus_test PRIVATE ${INC_DIRS})
+
+add_test(NAME cactus_tests COMMAND cactus_test)
