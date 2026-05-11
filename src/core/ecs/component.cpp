@@ -32,21 +32,21 @@ export struct ComponentAtlas {
 
     auto destroy() const {}
 
-    template <typename T> [[nodiscard]] auto get_key() -> ComponentKey {
+    template <typename T> [[nodiscard]] auto get_or_create_key() -> ComponentKey {
         std::type_index type(typeid(T));
-        auto key_it = this->component_to_key_map.find(type);
-        if (key_it == this->component_to_key_map.end()) {
-            if (this->next_component_key >= MAX_COMPONENT_COUNT) {
+        auto key_it = component_to_key_map.find(type);
+        if (key_it == component_to_key_map.end()) {
+            if (next_component_key >= MAX_COMPONENT_COUNT) {
                 assert(false);
                 // TODO ERROR
                 return (ComponentKey)-1;
             }
 
-            ComponentKey key = this->next_component_key;
-            ++this->next_component_key;
+            ComponentKey key = next_component_key;
+            ++next_component_key;
 
-            this->component_to_key_map[type] = key;
-            this->component_datas.push_back(ComponentData{.size = sizeof(T), .align = alignof(T)});
+            component_to_key_map[type] = key;
+            component_datas.push_back(ComponentData{.size = sizeof(T), .align = alignof(T)});
 
             return key;
         }
@@ -54,25 +54,31 @@ export struct ComponentAtlas {
         return key_it->second;
     }
 
-    template <typename T> [[nodiscard]] auto get_key_const() const -> std::optional<ComponentKey> {
+    template <typename T> [[nodiscard]] auto get_key() const -> std::optional<ComponentKey> {
         std::type_index type(typeid(T));
-        auto key_it = this->component_to_key_map.find(type);
-        if (key_it == this->component_to_key_map.end()) { return {}; }
+        auto key_it = component_to_key_map.find(type);
+        if (key_it == component_to_key_map.end()) { return {}; }
+
+        return key_it->second;
+    }
+    [[nodiscard]] auto get_key(std::type_index type) const -> std::optional<ComponentKey> {
+        auto key_it = component_to_key_map.find(type);
+        if (key_it == component_to_key_map.end()) { return {}; }
 
         return key_it->second;
     }
 
-    template <typename T> [[nodiscard]] auto has_type() -> bool {
-        return this->component_to_key_map.contains(std::type_index(typeid(T)));
+    template <typename T> [[nodiscard]] auto existed_type() const -> bool {
+        return component_to_key_map.contains(std::type_index(typeid(T)));
     }
-    [[nodiscard]] auto has_type(std::type_index component) -> bool { return this->component_to_key_map.contains(component); }
+    [[nodiscard]] auto existed_type(std::type_index component) -> bool { return component_to_key_map.contains(component); }
 
     [[nodiscard]] auto get(ComponentKey key) -> ComponentData {
-        assert(key < this->component_datas.size());
-        return this->component_datas[key];
+        assert(key < component_datas.size());
+        return component_datas[key];
     }
 
-    [[nodiscard]] auto has(ComponentKey key) -> bool { return key < this->component_datas.size(); }
+    [[nodiscard]] auto has(ComponentKey key) -> bool { return key < component_datas.size(); }
 };
 
 } // namespace cactus

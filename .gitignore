@@ -3,3 +3,5 @@ vendor/
 .cache/
 
 .github/
+
+CLAUDE.md

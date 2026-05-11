@@ -18,76 +18,79 @@ export [[nodiscard]] auto align_up(size_t p, size_t align) -> size_t;
 
 export struct Archetype {
     ComponentAtlas *component_atlas_ref;
-    Signature signature;
+    SignatureAtlas *signature_atlas_ref;
+    SignatureAtlasKey signature_key;
 
     char *table_raw;
     size_t row_size;
     size_t len;
     size_t cap;
 
-    [[nodiscard]] static auto make(ComponentAtlas *component_atlas_ref, const Signature &signature) -> Archetype {
+    [[nodiscard]] static auto make(ComponentAtlas *component_atlas_ref, SignatureAtlas *signature_atlas_ref,
+                                   SignatureAtlasKey signature_key) -> Archetype {
         return Archetype{.component_atlas_ref = component_atlas_ref,
-                         .signature = signature,
+                         .signature_atlas_ref = signature_atlas_ref,
+                         .signature_key = signature_key,
                          .table_raw = nullptr,
-                         .row_size = handle_cal_row_size(component_atlas_ref, signature),
+                         .row_size = handle_cal_row_size(component_atlas_ref, signature_atlas_ref->get(signature_key)),
                          .len = 0,
                          .cap = 0};
     }
 
-    auto destroy() const { std::free(this->table_raw); }
+    auto destroy() const { std::free(table_raw); }
 
-    auto reserve(size_t cap) {
-        if (cap <= this->cap) return;
+    auto reserve(size_t new_cap) {
+        if (new_cap <= cap) return;
 
-        char *new_table_raw = (char *)std::malloc(cap * this->row_size);
+        char *new_table_raw = (char *)std::malloc(new_cap * row_size);
 
-        if (this->table_raw != nullptr) {
-            std::memcpy(new_table_raw, this->table_raw, this->len * this->row_size);
-            std::free(this->table_raw);
+        if (table_raw != nullptr) {
+            std::memcpy(new_table_raw, table_raw, len * row_size);
+            std::free(table_raw);
         }
 
-        this->table_raw = new_table_raw;
-        this->cap = cap;
+        table_raw = new_table_raw;
+        cap = new_cap;
     }
     auto append() -> size_t {
-        if (this->len >= this->cap) {
-            size_t new_cap = this->cap * 2;
+        if (len >= cap) {
+            size_t new_cap = cap * 2;
             if (new_cap < 4) new_cap = 4;
-            this->reserve(new_cap);
+            reserve(new_cap);
         }
 
-        ++this->len;
+        ++len;
 
-        char *last_row_ptr = this->table_raw + (this->len - 1) * this->row_size;
-        std::memset(last_row_ptr, 0, this->row_size);
+        char *last_row_ptr = table_raw + (len - 1) * row_size;
+        std::memset(last_row_ptr, 0, row_size);
 
-        return this->len - 1;
+        return len - 1;
     }
     auto remove(size_t index) -> bool {
-        if (index >= this->len) return false;
+        if (index >= len) return false;
 
-        char *t_row_ptr = this->table_raw + index * this->row_size;
-        char *last_row_ptr = this->table_raw + (this->len - 1) * this->row_size;
-        std::memcpy(t_row_ptr, last_row_ptr, this->row_size);
+        char *t_row_ptr = table_raw + index * row_size;
+        char *last_row_ptr = table_raw + (len - 1) * row_size;
+        std::memcpy(t_row_ptr, last_row_ptr, row_size);
 
-        --this->len;
+        --len;
 
         return true;
     }
 
     [[nodiscard]] auto get_row_ptr(size_t index) const -> const void * {
-        assert(index < this->len);
-        return this->table_raw + index * this->row_size;
+        assert(index < len);
+        return table_raw + index * row_size;
     }
     [[nodiscard]] auto get_row_ptr(size_t index) -> void * {
-        assert(index < this->len);
-        return this->table_raw + index * this->row_size;
+        assert(index < len);
+        return table_raw + index * row_size;
     }
     [[nodiscard]] auto get_component_row_offset(ComponentKey component) const -> size_t {
         size_t res = 0;
 
-        for (ComponentKey c : SignatureView(this->signature)) {
-            ComponentData c_data = this->component_atlas_ref->get(c);
+        for (ComponentKey c : SignatureView(signature_atlas_ref->get(signature_key))) {
+            ComponentData c_data = component_atlas_ref->get(c);
 
             if (c == component) {
                 res = align_up(res, c_data.align);
@@ -100,10 +103,10 @@ export struct Archetype {
         return res;
     }
     [[nodiscard]] auto get_component_ptr(size_t index, ComponentKey component) const -> const void * {
-        return (const char *)this->get_row_ptr(index) + this->get_component_row_offset(component);
+        return (const char *)get_row_ptr(index) + get_component_row_offset(component);
     }
     [[nodiscard]] auto get_component_ptr(size_t index, ComponentKey component) -> void * {
-        return (char *)this->get_row_ptr(index) + this->get_component_row_offset(component);
+        return (char *)get_row_ptr(index) + get_component_row_offset(component);
     }
 };
 
@@ -139,37 +142,40 @@ export using ArchetypeAtlasKey = size_t;
 export struct ArchetypeAtlas {
     std::vector<Archetype> archetypes;
     ComponentAtlas *component_atlas_ref;
+    SignatureAtlas *signature_atlas_ref;
 
-    [[nodiscard]] static auto make(ComponentAtlas *component_atlas_ref) -> ArchetypeAtlas {
-        return ArchetypeAtlas{.archetypes = std::vector<Archetype>(), .component_atlas_ref = component_atlas_ref};
+    [[nodiscard]] static auto make(ComponentAtlas *component_atlas_ref, SignatureAtlas *signature_atlas_ref) -> ArchetypeAtlas {
+        return ArchetypeAtlas{.archetypes = std::vector<Archetype>(),
+                              .component_atlas_ref = component_atlas_ref,
+                              .signature_atlas_ref = signature_atlas_ref};
     }
 
     auto destroy() const {
-        for (const auto &a : this->archetypes) a.destroy();
+        for (const auto &a : archetypes) a.destroy();
     }
 
-    [[nodiscard]] auto has(ArchetypeAtlasKey key) const -> bool { return key < this->archetypes.size(); }
+    [[nodiscard]] auto has(ArchetypeAtlasKey key) const -> bool { return key < archetypes.size(); }
     [[nodiscard]] auto get(ArchetypeAtlasKey key) const -> Archetype {
-        assert(key < this->archetypes.size());
-        return this->archetypes[key];
+        assert(key < archetypes.size());
+        return archetypes[key];
     }
     [[nodiscard]] auto get_ptr(ArchetypeAtlasKey key) -> Archetype * {
-        assert(key < this->archetypes.size());
-        return &this->archetypes[key];
+        assert(key < archetypes.size());
+        return &archetypes[key];
     }
 
-    auto append(ArchetypeAtlasKey key) -> size_t {
-        if (key >= this->archetypes.size()) return -1;
-        return this->archetypes[key].append();
-    }
-    auto remove(ArchetypeAtlasKey key, size_t index) -> bool {
-        if (key >= this->archetypes.size()) return false;
-        return this->archetypes[key].remove(index);
+    auto archetype_make(SignatureAtlasKey signature_key) -> size_t {
+        archetypes.push_back(Archetype::make(component_atlas_ref, signature_atlas_ref, signature_key));
+        return archetypes.size() - 1;
     }
 
-    auto new_archetype(const Signature &signature) -> size_t {
-        this->archetypes.push_back(Archetype::make(this->component_atlas_ref, signature));
-        return this->archetypes.size() - 1;
+    auto archetype_append(ArchetypeAtlasKey key) -> size_t {
+        assert(key < archetypes.size());
+        return archetypes[key].append();
+    }
+    auto archetype_remove(ArchetypeAtlasKey key, size_t index) -> bool {
+        assert(key < archetypes.size());
+        return archetypes[key].remove(index);
     }
 };
 
