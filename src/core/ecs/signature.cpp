@@ -239,6 +239,12 @@ export struct SignatureAtlas {
         assert(key < signatures.size());
         return signatures[key].count();
     }
+
+    [[nodiscard]] auto signature_contains(SignatureAtlasKey key, SignatureAtlasKey other_key) const -> bool {
+        assert(key < signatures.size());
+        assert(other_key < signatures.size());
+        return (signatures[key] & signatures[other_key]) == signatures[other_key];
+    }
 };
 
 } // namespace cactus

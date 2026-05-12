@@ -109,28 +109,28 @@ export struct Archetype {
         return true;
     }
 
-    [[nodiscard]] auto get_row_ptr(size_t index) const -> const void * {
-        assert(index < len);
-        return table_raw + index * row_size;
+    [[nodiscard]] auto get_row_ptr(size_t row_index) const -> const void * {
+        assert(row_index < len);
+        return table_raw + row_index * row_size;
     }
-    [[nodiscard]] auto get_row_ptr(size_t index) -> void * {
-        assert(index < len);
-        return table_raw + index * row_size;
+    [[nodiscard]] auto get_row_ptr(size_t row_index) -> void * {
+        assert(row_index < len);
+        return table_raw + row_index * row_size;
     }
     [[nodiscard]] auto get_component_row_offset(ComponentKey component) const -> size_t {
         assert(component_offset_list.contains(component));
         return component_offset_list.at(component);
     }
-    [[nodiscard]] auto get_component_ptr(size_t index, ComponentKey component) const -> const void * {
-        return (const char *)get_row_ptr(index) + get_component_row_offset(component);
+    [[nodiscard]] auto get_component_ptr(size_t row_index, ComponentKey component) const -> const void * {
+        return (const char *)get_row_ptr(row_index) + get_component_row_offset(component);
     }
-    [[nodiscard]] auto get_component_ptr(size_t index, ComponentKey component) -> void * {
-        return (char *)get_row_ptr(index) + get_component_row_offset(component);
+    [[nodiscard]] auto get_component_ptr(size_t row_index, ComponentKey component) -> void * {
+        return (char *)get_row_ptr(row_index) + get_component_row_offset(component);
     }
 
-    [[nodiscard]] auto get_owner(size_t index) const -> Entity {
-        assert(index < len);
-        return owner_raw[index];
+    [[nodiscard]] auto get_owner(size_t row_index) const -> Entity {
+        assert(row_index < len);
+        return owner_raw[row_index];
     }
 };
 

@@ -5,6 +5,7 @@ module;
 export module cactus.core.ecs:views;
 
 export import :world;
+export import :signature;
 
 import std;
 
@@ -23,21 +24,78 @@ template <typename T, typename... Ts> inline constexpr bool contains_v = (std::i
 
 export template <typename... Ts> struct EntityView {
     const World *world_ref;
-    Entity entity;
-    std::vector<void *> ptr_datas;
+    size_t archetype_index;
+    size_t row_index;
 
-    explicit EntityView(const World &world_ref, const Entity &entity, std::vector<void *> &&data)
-        : world_ref(&world_ref), entity(entity), ptr_datas(data) {}
+    Entity entity;
+    const void *row_ptr;
+    std::vector<size_t> row_ptr_offsets;
+
+    EntityView(const World &world_ref, size_t archetype_index, size_t row_index)
+        : world_ref(&world_ref), archetype_index(archetype_index), row_index(row_index) {
+
+        entity = world_ref.archetypes[archetype_index].get_owner(row_index);
+
+        row_ptr = world_ref.archetypes[archetype_index].get_row_ptr(row_index);
+
+        row_ptr_offsets.reserve(sizeof...(Ts));
+        auto find_type_ptr_in_archetype = [&](auto type_tag) -> void * {
+            using T = typename decltype(type_tag)::type;
+            auto component_key_opt = world_ref.component_atlas.get_key<T>();
+
+            assert(component_key_opt.has_value());
+            if (!component_key_opt.has_value()) {
+                // TODO error
+            }
+
+            return world_ref.archetypes[archetype_index].get_component_row_offset(component_key_opt.value());
+        };
+        (..., row_ptr_offsets.push_back(find_type_ptr_in_archetype(std::type_identity<Ts>{})));
+    }
+
+    auto change_to_next_row() -> bool {
+        if (row_index == world_ref->archetypes[archetype_index].len - 1) return false;
+
+        ++row_index;
+
+        entity = world_ref->archetypes[archetype_index].get_owner(row_index);
+        row_ptr = (void *)((char *)row_ptr + world_ref->archetypes[archetype_index].row_size);
+
+        return true;
+    }
+
+    auto change_archetype(size_t new_archetype_index, size_t new_row_index = 0) {
+        archetype_index = new_archetype_index;
+        row_index = new_row_index;
+
+        entity = world_ref->archetypes[archetype_index].get_owner(row_index);
+
+        row_ptr = world_ref->archetypes[archetype_index].get_row_ptr(row_index);
+
+        row_ptr_offsets.reserve(sizeof...(Ts));
+        auto find_type_ptr_in_archetype = [&](auto type_tag) -> void * {
+            using T = typename decltype(type_tag)::type;
+            auto component_key_opt = world_ref->component_atlas.get_key<T>();
+
+            assert(component_key_opt.has_value());
+            if (!component_key_opt.has_value()) {
+                // TODO error
+            }
+
+            return world_ref->archetypes[archetype_index].get_component_row_offset(component_key_opt.value());
+        };
+        (..., row_ptr_offsets.push_back(find_type_ptr_in_archetype(std::type_identity<Ts>{})));
+    }
 
     template <typename T>
         requires contains_v<T, Ts...>
     [[nodiscard]] auto get() -> T * {
-        return (T *)ptr_datas[index_of_v<T, Ts...>];
+        return (T *)((char *)row_ptr + row_ptr_offsets[index_of_v<T, Ts...>]);
     }
     template <typename T>
         requires contains_v<T, Ts...>
     [[nodiscard]] auto get() const -> const T * {
-        return (const T *)ptr_datas[index_of_v<T, Ts...>];
+        return (const T *)((char *)row_ptr + row_ptr_offsets[index_of_v<T, Ts...>]);
     }
 
     [[nodiscard]] auto to_tuple() -> std::tuple<Entity, Ts *...> {
@@ -50,63 +108,90 @@ export template <typename... Ts> struct EntityView {
 
 private:
     template <std::size_t... Is> auto to_tuple_impl(std::index_sequence<Is...>) -> std::tuple<Entity, Ts *...> {
-        return std::make_tuple(entity, static_cast<Ts *>(ptr_datas[Is])...);
+        return std::make_tuple(entity, (Ts *)((char *)row_ptr + row_ptr_offsets[Is])...);
     }
     template <std::size_t... Is> auto to_tuple_no_entity_impl(std::index_sequence<Is...>) -> std::tuple<Entity, Ts *...> {
-        return std::make_tuple(static_cast<Ts *>(ptr_datas[Is])...);
+        return std::make_tuple((Ts *)((char *)row_ptr + row_ptr_offsets[Is])...);
     }
 };
 
 export template <typename... Ts> struct WorldView {
     const World *world_ref;
-    std::vector<size_t> archetype_list;
+    SignatureAtlasKey signature_key;
 
-    explicit WorldView(const World &world_ref) : world_ref(&world_ref), archetype_list() {
-        Signature signature{};
-        ((signature.set(world_ref.component_atlas.get_key<Ts>().value_or(MAX_COMPONENT_COUNT - 1))),
-         ...); // FIXME MAX_COMPONENT_COUNT - 1 as fallback is just a temp solution
-        assert(!signature.test(MAX_COMPONENT_COUNT - 1));
+    std::vector<size_t> archetype_index_list;
+
+    WorldView(const World &world_ref) : world_ref(&world_ref), signature_key(EMPTY_SIGNATURE_KEY) {
+        // construct signature from types
+        auto add_type_to_signature = [&](auto type_tag) {
+            using T = typename decltype(type_tag)::type;
+            auto component_key_opt = world_ref.component_atlas.get_key<T>();
+
+            assert(component_key_opt.has_value());
+            if (!component_key_opt.has_value()) {
+                // TODO error
+            }
+
+            signature_key = world_ref.signature_atlas.get_by_add(signature_key, component_key_opt.value());
+        };
+        (..., add_type_to_signature(std::type_identity<Ts>{}));
 
         // TODO optimize, this is bruce-force
         for (const auto &[signature_key, archetype_key] : world_ref.signature_to_archetype_key_map) {
-            const Signature s = world_ref.signature_atlas.get(signature_key);
-            if ((s & signature) == signature) { archetype_list.push_back(archetype_key); }
+            if (world_ref.signature_atlas.signature_contains(signature_key, signature_key)) {
+                archetype_index_list.push_back(archetype_key);
+            }
         }
-        archetype_list.shrink_to_fit();
     }
 
     struct iterator {
         using iterator_category = std::forward_iterator_tag;
-        using value_type = std::tuple<Ts *...>;
+        using value_type = std::tuple<Entity, Ts *...>;
         using difference_type = std::ptrdiff_t;
 
         const WorldView *source;
-        size_t cur_archetype_list_index;
+
+        size_t cur_archetype_index_list_index;
         size_t cur_row_index;
 
         EntityView<Ts...> entity_view;
 
-        iterator(const WorldView &world_view, size_t archetype_list_index, size_t row_index)
-            : source(&world_view), cur_archetype_list_index(archetype_list_index), cur_row_index(row_index),
-              entity_view(world_view.world_ref, Entity{}, std::vector<void *>(sizeof...(Ts))) {
-            size_t cur_archetype_key = world_view.archetype_list[cur_archetype_list_index];
+        iterator(const WorldView &source, size_t archetype_index_list_index, size_t row_index)
+            : source(&source), cur_archetype_index_list_index(archetype_index_list_index), cur_row_index(row_index) {
+            assert(archetype_index_list_index < source.archetype_index_list.size());
+            size_t archetype_index = source.archetype_index_list[archetype_index_list_index];
+            assert(archetype_index < source.world_ref->archetypes.size());
+
+            entity_view = EntityView<Ts...>(source.world_ref, archetype_index, row_index);
         }
 
         auto operator*() const -> value_type { return entity_view.to_tuple(); }
 
         bool operator!=(const iterator &other) const {
-            return cur_archetype_list_index != other.cur_archetype_list_index &&
+            return cur_archetype_index_list_index != other.cur_archetype_index_list_index &&
                    cur_row_index != other.cur_row_index;
         }
 
         auto operator++() -> iterator & {
-            // TODO
+            if (entity_view.change_to_next_row()) {
+                ++cur_row_index;
+            } else {
+                ++cur_archetype_index_list_index;
+                cur_row_index = 0;
+
+                assert(cur_archetype_index_list_index < source->archetype_index_list.size());
+                size_t archetype_index = source->archetype_index_list[cur_archetype_index_list_index];
+                assert(archetype_index < source->world_ref->archetypes.size());
+
+                entity_view.change_archetype(archetype_index);
+            }
+
             return *this;
         }
     };
 
-    // iterator begin() const { return iterator(*data_ref, 0); }
-    // iterator end() const { return iterator(*data_ref, MAX_COMPONENT_COUNT); }
+    iterator begin() const { return iterator(*this, 0, 0); }
+    iterator end() const { return iterator(*this, archetype_index_list.size(), 0); }
 };
 
 } // namespace cactus
