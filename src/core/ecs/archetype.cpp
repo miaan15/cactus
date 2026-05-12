@@ -43,7 +43,7 @@ export struct Archetype {
                       .cap = 0};
         size_t offset = 0;
         for (ComponentKey c : SignatureView(signature_atlas_ref->get(signature_key))) {
-            ComponentData c_data = component_registry_ref->get(c);
+            ComponentData c_data = component_registry_ref->get_component_data(c);
 
             offset = align_up(offset, c_data.align);
 
@@ -143,9 +143,9 @@ export struct Archetype {
     size_t res = 0;
 
     for (ComponentKey c : SignatureView(signature)) {
-        assert(component_registry_ref->has(c));
+        assert(component_registry_ref->has_key(c));
 
-        ComponentData c_data = component_registry_ref->get(c);
+        ComponentData c_data = component_registry_ref->get_component_data(c);
 
         res = align_up(res, c_data.align) + c_data.size;
     }
@@ -153,7 +153,7 @@ export struct Archetype {
     if (signature.any()) {
         ComponentKey c = *SignatureView(signature).begin();
 
-        ComponentData c_data = component_registry_ref->get(c);
+        ComponentData c_data = component_registry_ref->get_component_data(c);
 
         res = align_up(res, c_data.align);
     }

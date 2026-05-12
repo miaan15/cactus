@@ -252,8 +252,8 @@ private:
             const ComponentKey from_component = *from_signature_it;
             const ComponentKey to_component = *to_signature_it;
 
-            ComponentData from_c_data = component_registry.get(from_component);
-            ComponentData to_c_data = component_registry.get(to_component);
+            ComponentData from_c_data = component_registry.get_component_data(from_component);
+            ComponentData to_c_data = component_registry.get_component_data(to_component);
 
             if (from_component == to_component) {
                 from_row_offset = align_up(from_row_offset, from_c_data.align);
