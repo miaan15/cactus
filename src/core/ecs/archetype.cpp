@@ -15,10 +15,10 @@ using size_t = std::size_t;
 namespace cactus {
 
 export [[nodiscard]] auto align_up(size_t p, size_t align) -> size_t;
-[[nodiscard]] auto handle_cal_row_size(ComponentAtlas *component_atlas_ref, const Signature &signature) -> size_t;
+[[nodiscard]] auto handle_cal_row_size(ComponentRegistry *component_registry_ref, const Signature &signature) -> size_t;
 
 export struct Archetype {
-    ComponentAtlas *component_atlas_ref;
+    ComponentRegistry *component_registry_ref;
     SignatureAtlas *signature_atlas_ref;
     SignatureAtlasKey signature_key;
 
@@ -30,20 +30,20 @@ export struct Archetype {
 
     std::flat_map<ComponentKey, size_t> component_offset_list;
 
-    [[nodiscard]] static auto make(ComponentAtlas *component_atlas_ref, SignatureAtlas *signature_atlas_ref,
+    [[nodiscard]] static auto make(ComponentRegistry *component_registry_ref, SignatureAtlas *signature_atlas_ref,
                                    SignatureAtlasKey signature_key) -> Archetype {
         Archetype archetype =
-            Archetype{.component_atlas_ref = component_atlas_ref,
+            Archetype{.component_registry_ref = component_registry_ref,
                       .signature_atlas_ref = signature_atlas_ref,
                       .signature_key = signature_key,
                       .table_raw = nullptr,
                       .owner_raw = nullptr,
-                      .row_size = handle_cal_row_size(component_atlas_ref, signature_atlas_ref->get(signature_key)),
+                      .row_size = handle_cal_row_size(component_registry_ref, signature_atlas_ref->get(signature_key)),
                       .len = 0,
                       .cap = 0};
         size_t offset = 0;
         for (ComponentKey c : SignatureView(signature_atlas_ref->get(signature_key))) {
-            ComponentData c_data = component_atlas_ref->get(c);
+            ComponentData c_data = component_registry_ref->get(c);
 
             offset = align_up(offset, c_data.align);
 
@@ -139,13 +139,13 @@ export struct Archetype {
     return (p + align - 1) & ~(align - 1);
 }
 
-[[nodiscard]] auto handle_cal_row_size(ComponentAtlas *component_atlas_ref, const Signature &signature) -> size_t {
+[[nodiscard]] auto handle_cal_row_size(ComponentRegistry *component_registry_ref, const Signature &signature) -> size_t {
     size_t res = 0;
 
     for (ComponentKey c : SignatureView(signature)) {
-        assert(component_atlas_ref->has(c));
+        assert(component_registry_ref->has(c));
 
-        ComponentData c_data = component_atlas_ref->get(c);
+        ComponentData c_data = component_registry_ref->get(c);
 
         res = align_up(res, c_data.align) + c_data.size;
     }
@@ -153,7 +153,7 @@ export struct Archetype {
     if (signature.any()) {
         ComponentKey c = *SignatureView(signature).begin();
 
-        ComponentData c_data = component_atlas_ref->get(c);
+        ComponentData c_data = component_registry_ref->get(c);
 
         res = align_up(res, c_data.align);
     }

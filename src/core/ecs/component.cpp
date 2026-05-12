@@ -19,15 +19,15 @@ export struct ComponentData {
     size_t align;
 };
 
-export struct ComponentAtlas {
+export struct ComponentRegistry {
     std::flat_map<std::type_index, ComponentKey> component_to_key_map;
     std::vector<ComponentData> component_datas;
     size_t next_component_key;
 
-    [[nodiscard]] static auto make() -> ComponentAtlas {
-        return ComponentAtlas{.component_to_key_map = std::flat_map<std::type_index, ComponentKey>(),
-                              .component_datas = std::vector<ComponentData>(),
-                              .next_component_key = 0};
+    [[nodiscard]] static auto make() -> ComponentRegistry {
+        return ComponentRegistry{.component_to_key_map = std::flat_map<std::type_index, ComponentKey>(),
+                                 .component_datas = std::vector<ComponentData>(),
+                                 .next_component_key = 0};
     }
 
     auto destroy() const {}
@@ -68,17 +68,19 @@ export struct ComponentAtlas {
         return key_it->second;
     }
 
+    [[nodiscard]] auto has_key(ComponentKey key) const -> bool { return key < component_datas.size(); }
+
     template <typename T> [[nodiscard]] auto existed_type() const -> bool {
         return component_to_key_map.contains(std::type_index(typeid(T)));
     }
-    [[nodiscard]] auto existed_type(std::type_index component) -> bool { return component_to_key_map.contains(component); }
+    [[nodiscard]] auto existed_type(std::type_index component) const -> bool {
+        return component_to_key_map.contains(component);
+    }
 
-    [[nodiscard]] auto get(ComponentKey key) -> ComponentData {
+    [[nodiscard]] auto get_component_data(ComponentKey key) const -> ComponentData {
         assert(key < component_datas.size());
         return component_datas[key];
     }
-
-    [[nodiscard]] auto has(ComponentKey key) -> bool { return key < component_datas.size(); }
 };
 
 } // namespace cactus

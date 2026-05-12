@@ -22,7 +22,7 @@ template <typename T, typename... Ts> inline constexpr size_t index_of_v = index
 
 template <typename T, typename... Ts> inline constexpr bool contains_v = (std::is_same_v<T, Ts> || ...);
 
-export template <typename... Ts> struct EntityView {
+export template <typename... Ts> struct EntityRowDataView {
     const World *world_ref;
     size_t archetype_index;
     size_t row_index;
@@ -31,7 +31,7 @@ export template <typename... Ts> struct EntityView {
     const void *row_ptr;
     std::vector<size_t> row_ptr_offsets;
 
-    EntityView(const World &world_ref, size_t archetype_index, size_t row_index)
+    EntityRowDataView(const World &world_ref, size_t archetype_index, size_t row_index)
         : world_ref(&world_ref), archetype_index(archetype_index), row_index(row_index) {
 
         entity = world_ref.archetypes[archetype_index].get_owner(row_index);
@@ -41,7 +41,7 @@ export template <typename... Ts> struct EntityView {
         row_ptr_offsets.reserve(sizeof...(Ts));
         auto find_type_ptr_in_archetype = [&](auto type_tag) -> void * {
             using T = typename decltype(type_tag)::type;
-            auto component_key_opt = world_ref.component_atlas.get_key<T>();
+            auto component_key_opt = world_ref.component_registry.get_key<T>();
 
             assert(component_key_opt.has_value());
             if (!component_key_opt.has_value()) {
@@ -75,7 +75,7 @@ export template <typename... Ts> struct EntityView {
         row_ptr_offsets.reserve(sizeof...(Ts));
         auto find_type_ptr_in_archetype = [&](auto type_tag) -> void * {
             using T = typename decltype(type_tag)::type;
-            auto component_key_opt = world_ref->component_atlas.get_key<T>();
+            auto component_key_opt = world_ref->component_registry.get_key<T>();
 
             assert(component_key_opt.has_value());
             if (!component_key_opt.has_value()) {
@@ -125,7 +125,7 @@ export template <typename... Ts> struct WorldView {
         // construct signature from types
         auto add_type_to_signature = [&](auto type_tag) {
             using T = typename decltype(type_tag)::type;
-            auto component_key_opt = world_ref.component_atlas.get_key<T>();
+            auto component_key_opt = world_ref.component_registry.get_key<T>();
 
             assert(component_key_opt.has_value());
             if (!component_key_opt.has_value()) {
@@ -154,7 +154,7 @@ export template <typename... Ts> struct WorldView {
         size_t cur_archetype_index_list_index;
         size_t cur_row_index;
 
-        EntityView<Ts...> entity_view;
+        EntityRowDataView<Ts...> entity_view;
 
         iterator(const WorldView &source, size_t archetype_index_list_index, size_t row_index)
             : source(&source), cur_archetype_index_list_index(archetype_index_list_index), cur_row_index(row_index) {
@@ -162,7 +162,7 @@ export template <typename... Ts> struct WorldView {
             size_t archetype_index = source.archetype_index_list[archetype_index_list_index];
             assert(archetype_index < source.world_ref->archetypes.size());
 
-            entity_view = EntityView<Ts...>(source.world_ref, archetype_index, row_index);
+            entity_view = EntityRowDataView<Ts...>(source.world_ref, archetype_index, row_index);
         }
 
         auto operator*() const -> value_type { return entity_view.to_tuple(); }

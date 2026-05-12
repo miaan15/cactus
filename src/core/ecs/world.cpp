@@ -26,14 +26,14 @@ export struct World {
 
     std::unordered_map<SignatureAtlasKey, size_t> signature_to_archetype_key_map;
 
-    ComponentAtlas component_atlas;
+    ComponentRegistry component_registry;
     SignatureAtlas signature_atlas;
     std::vector<Archetype> archetypes;
 
     [[nodiscard]] static auto make() -> World {
         World world = World{.entities_data = SlotMap<EntityData>::make(),
                             .signature_to_archetype_key_map = std::unordered_map<SignatureAtlasKey, size_t>(),
-                            .component_atlas = ComponentAtlas::make(),
+                            .component_registry = ComponentRegistry::make(),
                             .signature_atlas = SignatureAtlas::make(),
                             .archetypes = std::vector<Archetype>()};
         return world;
@@ -41,7 +41,7 @@ export struct World {
 
     auto destroy() const {
         entities_data.destroy();
-        component_atlas.destroy();
+        component_registry.destroy();
         signature_atlas.destroy();
         for (const auto &a : archetypes) a.destroy();
     }
@@ -56,7 +56,7 @@ export struct World {
         if (!has(entity)) return {};
         if (!has_component<T>(entity)) return {};
 
-        std::optional<ComponentKey> component_opt = component_atlas.get_key<T>();
+        std::optional<ComponentKey> component_opt = component_registry.get_key<T>();
         if (!component_opt.has_value()) return {};
         const ComponentKey component = component_opt.value();
 
@@ -75,7 +75,7 @@ export struct World {
         if (!has(entity)) return {};
         if (!has_component<T>(entity)) return {};
 
-        std::optional<ComponentKey> component_opt = component_atlas.get_key<T>();
+        std::optional<ComponentKey> component_opt = component_registry.get_key<T>();
         if (!component_opt.has_value()) return {};
         const ComponentKey component = component_opt.value();
 
@@ -94,7 +94,7 @@ export struct World {
     template <typename T> [[nodiscard]] auto has_component(const Entity &entity) const -> bool {
         if (!has(entity)) return false;
 
-        std::optional<ComponentKey> component_opt = component_atlas.get_key<T>();
+        std::optional<ComponentKey> component_opt = component_registry.get_key<T>();
         if (!component_opt.has_value()) return false;
         const ComponentKey component = component_opt.value();
 
@@ -107,7 +107,7 @@ export struct World {
         if (!has(entity)) return false;
         if (!has_component<T>(entity)) return false;
 
-        std::optional<ComponentKey> component_opt = component_atlas.get_key<T>();
+        std::optional<ComponentKey> component_opt = component_registry.get_key<T>();
         if (!component_opt.has_value()) return false;
         const ComponentKey component = component_opt.value();
 
@@ -128,7 +128,7 @@ export struct World {
     template <typename T> auto add_component(const Entity &entity, const T &val) -> bool {
         if (!has(entity)) return false;
 
-        const ComponentKey component = component_atlas.get_or_create_key<T>();
+        const ComponentKey component = component_registry.get_or_create_key<T>();
 
         const EntityData entity_data = entities_data.get(entity).value();
         const SignatureAtlasKey entity_signature_key = entity_data.signature_key;
@@ -180,7 +180,7 @@ export struct World {
     template <typename T> auto remove_component(const Entity &entity) -> bool {
         if (!has(entity)) return false;
 
-        std::optional<ComponentKey> component_opt = component_atlas.get_key<T>();
+        std::optional<ComponentKey> component_opt = component_registry.get_key<T>();
         if (!component_opt.has_value()) return false;
         const ComponentKey component = component_opt.value();
 
@@ -229,7 +229,7 @@ export struct World {
 
 private:
     auto create_new_archetype(SignatureAtlasKey signature_key) -> size_t {
-        archetypes.push_back(Archetype::make(&component_atlas, &signature_atlas, signature_key));
+        archetypes.push_back(Archetype::make(&component_registry, &signature_atlas, signature_key));
         return archetypes.size() - 1;
     }
 
@@ -252,8 +252,8 @@ private:
             const ComponentKey from_component = *from_signature_it;
             const ComponentKey to_component = *to_signature_it;
 
-            ComponentData from_c_data = component_atlas.get(from_component);
-            ComponentData to_c_data = component_atlas.get(to_component);
+            ComponentData from_c_data = component_registry.get(from_component);
+            ComponentData to_c_data = component_registry.get(to_component);
 
             if (from_component == to_component) {
                 from_row_offset = align_up(from_row_offset, from_c_data.align);
