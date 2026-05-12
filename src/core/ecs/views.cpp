@@ -31,6 +31,8 @@ export template <typename... Ts> struct EntityRowDataView {
     const void *row_ptr;
     std::vector<size_t> row_ptr_offsets;
 
+    EntityRowDataView() : world_ref(nullptr) {}
+
     EntityRowDataView(const World &world_ref, size_t archetype_index, size_t row_index)
         : world_ref(&world_ref), archetype_index(archetype_index), row_index(row_index) {
 
@@ -39,7 +41,7 @@ export template <typename... Ts> struct EntityRowDataView {
         row_ptr = world_ref.archetypes[archetype_index].get_row_ptr(row_index);
 
         row_ptr_offsets.reserve(sizeof...(Ts));
-        auto find_type_ptr_in_archetype = [&](auto type_tag) -> void * {
+        auto find_type_ptr_in_archetype = [&](auto type_tag) -> size_t {
             using T = typename decltype(type_tag)::type;
             auto component_key_opt = world_ref.component_registry.get_key<T>();
 
@@ -54,6 +56,8 @@ export template <typename... Ts> struct EntityRowDataView {
     }
 
     auto change_to_next_row() -> bool {
+        assert(world_ref != nullptr);
+
         if (row_index == world_ref->archetypes[archetype_index].len - 1) return false;
 
         ++row_index;
@@ -64,16 +68,20 @@ export template <typename... Ts> struct EntityRowDataView {
         return true;
     }
 
-    auto change_archetype(size_t new_archetype_index, size_t new_row_index = 0) {
+    auto change_archetype(size_t new_archetype_index, size_t new_row_index = 0) -> bool {
+        assert(world_ref != nullptr);
+
         archetype_index = new_archetype_index;
         row_index = new_row_index;
+
+        if (row_index >= world_ref->archetypes[archetype_index].len) return false;
 
         entity = world_ref->archetypes[archetype_index].get_owner(row_index);
 
         row_ptr = world_ref->archetypes[archetype_index].get_row_ptr(row_index);
 
         row_ptr_offsets.reserve(sizeof...(Ts));
-        auto find_type_ptr_in_archetype = [&](auto type_tag) -> void * {
+        auto find_type_ptr_in_archetype = [&](auto type_tag) -> size_t {
             using T = typename decltype(type_tag)::type;
             auto component_key_opt = world_ref->component_registry.get_key<T>();
 
@@ -85,62 +93,66 @@ export template <typename... Ts> struct EntityRowDataView {
             return world_ref->archetypes[archetype_index].get_component_row_offset(component_key_opt.value());
         };
         (..., row_ptr_offsets.push_back(find_type_ptr_in_archetype(std::type_identity<Ts>{})));
+
+        return true;
     }
 
     template <typename T>
         requires contains_v<T, Ts...>
     [[nodiscard]] auto get() -> T * {
+        assert(world_ref != nullptr);
+
         return (T *)((char *)row_ptr + row_ptr_offsets[index_of_v<T, Ts...>]);
     }
     template <typename T>
         requires contains_v<T, Ts...>
     [[nodiscard]] auto get() const -> const T * {
+        assert(world_ref != nullptr);
+
         return (const T *)((char *)row_ptr + row_ptr_offsets[index_of_v<T, Ts...>]);
     }
 
-    [[nodiscard]] auto to_tuple() -> std::tuple<Entity, Ts *...> {
+    [[nodiscard]] auto to_tuple() const -> std::tuple<Entity, Ts *...> {
+        assert(world_ref != nullptr);
+
         return to_tuple_impl(std::make_index_sequence<sizeof...(Ts)>{});
     }
 
-    [[nodiscard]] auto to_tuple_no_entity() -> std::tuple<Ts *...> {
+    [[nodiscard]] auto to_tuple_no_entity() const -> std::tuple<Ts *...> {
+        assert(world_ref != nullptr);
+
         return to_tuple_no_entity_impl(std::make_index_sequence<sizeof...(Ts)>{});
     }
 
 private:
-    template <std::size_t... Is> auto to_tuple_impl(std::index_sequence<Is...>) -> std::tuple<Entity, Ts *...> {
+    template <std::size_t... Is> auto to_tuple_impl(std::index_sequence<Is...>) const -> std::tuple<Entity, Ts *...> {
         return std::make_tuple(entity, (Ts *)((char *)row_ptr + row_ptr_offsets[Is])...);
     }
-    template <std::size_t... Is> auto to_tuple_no_entity_impl(std::index_sequence<Is...>) -> std::tuple<Entity, Ts *...> {
+    template <std::size_t... Is> auto to_tuple_no_entity_impl(std::index_sequence<Is...>) const -> std::tuple<Entity, Ts *...> {
         return std::make_tuple((Ts *)((char *)row_ptr + row_ptr_offsets[Is])...);
     }
 };
 
 export template <typename... Ts> struct WorldView {
-    const World *world_ref;
+    World *world_ref;
     SignatureAtlasKey signature_key;
 
     std::vector<size_t> archetype_index_list;
 
-    WorldView(const World &world_ref) : world_ref(&world_ref), signature_key(EMPTY_SIGNATURE_KEY) {
+    WorldView(World *world_ref) : world_ref(world_ref), signature_key(EMPTY_SIGNATURE_KEY) {
         // construct signature from types
         auto add_type_to_signature = [&](auto type_tag) {
             using T = typename decltype(type_tag)::type;
-            auto component_key_opt = world_ref.component_registry.get_key<T>();
-
+            auto component_key_opt = world_ref->component_registry.get_key<T>();
             assert(component_key_opt.has_value());
-            if (!component_key_opt.has_value()) {
-                // TODO error
-            }
 
-            signature_key = world_ref.signature_atlas.get_by_add(signature_key, component_key_opt.value());
+            signature_key = world_ref->signature_atlas.get_or_create_by_add(signature_key, component_key_opt.value());
         };
         (..., add_type_to_signature(std::type_identity<Ts>{}));
 
         // TODO optimize, this is bruce-force
-        for (const auto &[signature_key, archetype_key] : world_ref.signature_to_archetype_key_map) {
-            if (world_ref.signature_atlas.signature_contains(signature_key, signature_key)) {
-                archetype_index_list.push_back(archetype_key);
-            }
+        for (const auto &[s, a] : world_ref->signature_to_archetype_key_map) {
+            if (world_ref->signature_atlas.signature_contains(s, signature_key)) { archetype_index_list.push_back(a); }
         }
     }
 
@@ -154,36 +166,46 @@ export template <typename... Ts> struct WorldView {
         size_t cur_archetype_index_list_index;
         size_t cur_row_index;
 
-        EntityRowDataView<Ts...> entity_view;
+        EntityRowDataView<Ts...> entity_row_data_view;
 
         iterator(const WorldView &source, size_t archetype_index_list_index, size_t row_index)
             : source(&source), cur_archetype_index_list_index(archetype_index_list_index), cur_row_index(row_index) {
-            assert(archetype_index_list_index < source.archetype_index_list.size());
-            size_t archetype_index = source.archetype_index_list[archetype_index_list_index];
-            assert(archetype_index < source.world_ref->archetypes.size());
+            if (archetype_index_list_index >= source.archetype_index_list.size()) {
+                cur_archetype_index_list_index = source.archetype_index_list.size();
+                cur_row_index = 0;
 
-            entity_view = EntityRowDataView<Ts...>(source.world_ref, archetype_index, row_index);
+                return;
+            }
+
+            assert(row_index < source.world_ref->archetypes[source.archetype_index_list[archetype_index_list_index]].len);
+
+            entity_row_data_view =
+                EntityRowDataView<Ts...>(*source.world_ref, source.archetype_index_list[archetype_index_list_index], row_index);
         }
 
-        auto operator*() const -> value_type { return entity_view.to_tuple(); }
+        auto operator*() const -> value_type { return entity_row_data_view.to_tuple(); }
 
         bool operator!=(const iterator &other) const {
-            return cur_archetype_index_list_index != other.cur_archetype_index_list_index &&
+            return source != other.source || cur_archetype_index_list_index != other.cur_archetype_index_list_index ||
                    cur_row_index != other.cur_row_index;
         }
 
         auto operator++() -> iterator & {
-            if (entity_view.change_to_next_row()) {
+            if (entity_row_data_view.change_to_next_row()) {
                 ++cur_row_index;
             } else {
-                ++cur_archetype_index_list_index;
-                cur_row_index = 0;
+                bool flag = true;
+                while (flag) {
+                    ++cur_archetype_index_list_index;
+                    cur_row_index = 0;
 
-                assert(cur_archetype_index_list_index < source->archetype_index_list.size());
-                size_t archetype_index = source->archetype_index_list[cur_archetype_index_list_index];
-                assert(archetype_index < source->world_ref->archetypes.size());
+                    if (cur_archetype_index_list_index >= source->archetype_index_list.size()) return *this;
 
-                entity_view.change_archetype(archetype_index);
+                    size_t archetype_index = source->archetype_index_list[cur_archetype_index_list_index];
+                    assert(archetype_index < source->world_ref->archetypes.size());
+
+                    flag = !entity_row_data_view.change_archetype(archetype_index);
+                }
             }
 
             return *this;
