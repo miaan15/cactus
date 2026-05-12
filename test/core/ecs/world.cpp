@@ -64,7 +64,7 @@ TEST(WorldViewTest, IterateEntitiesWithComponents) {
     Entity e3 = world.create();
     world.add_component(e3, Position{.x = 100.0f, .y = 200.0f});
 
-    WorldView<Position, Velocity> view(&world);
+    WorldView<Position, Velocity> view(world);
 
     int count = 0;
     for (auto [entity, pos, vel] : view) {
@@ -100,7 +100,7 @@ TEST(WorldIntegrationTest, MultipleEntitiesComponentMutation) {
     world.add_component(wall, Position{.x = 25.0f, .y = 25.0f});
 
     {
-        WorldView<Position, Velocity> moving_view(&world);
+        WorldView<Position, Velocity> moving_view(world);
         for (auto [entity, pos, vel] : moving_view) {
             pos->x += vel->dx;
             pos->y += vel->dy;
@@ -108,10 +108,8 @@ TEST(WorldIntegrationTest, MultipleEntitiesComponentMutation) {
     }
 
     {
-        WorldView<Health> health_view(&world);
-        for (auto [entity, hp] : health_view) {
-            hp->hp -= 10;
-        }
+        WorldView<Health> health_view(world);
+        for (auto [entity, hp] : health_view) { hp->hp -= 10; }
     }
 
     auto player_pos = world.get_component<Position>(player);

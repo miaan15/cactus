@@ -134,25 +134,27 @@ private:
 };
 
 export template <typename... Ts> struct WorldView {
-    World *world_ref;
+    const World *world_ref;
     SignatureAtlasKey signature_key;
 
     std::vector<size_t> archetype_index_list;
 
-    WorldView(World *world_ref) : world_ref(world_ref), signature_key(EMPTY_SIGNATURE_KEY) {
+    WorldView(const World &world_ref) : world_ref(&world_ref), signature_key(EMPTY_SIGNATURE_KEY) {
         // construct signature from types
-        auto add_type_to_signature = [&](auto type_tag) {
-            using T = typename decltype(type_tag)::type;
-            auto component_key_opt = world_ref->component_registry.get_key<T>();
-            assert(component_key_opt.has_value());
+        Signature signature{};
+        (..., signature.set(world_ref.component_registry.get_key<Ts>().value_or(MAX_COMPONENT_COUNT - 1)));
+        auto signature_key_opt = world_ref.signature_atlas.get_key_from_signature(std::move(signature));
 
-            signature_key = world_ref->signature_atlas.get_or_create_by_add(signature_key, component_key_opt.value());
-        };
-        (..., add_type_to_signature(std::type_identity<Ts>{}));
+        if (!signature_key_opt.has_value()) {
+            signature_key = EMPTY_SIGNATURE_KEY;
+            return;
+        }
+
+        signature_key = signature_key_opt.value();
 
         // TODO optimize, this is bruce-force
-        for (const auto &[s, a] : world_ref->signature_to_archetype_key_map) {
-            if (world_ref->signature_atlas.signature_contains(s, signature_key)) { archetype_index_list.push_back(a); }
+        for (const auto &[s, a] : world_ref.signature_to_archetype_key_map) {
+            if (world_ref.signature_atlas.signature_contains(s, signature_key)) { archetype_index_list.push_back(a); }
         }
     }
 

@@ -134,7 +134,7 @@ export struct World {
         const SignatureAtlasKey entity_signature_key = entity_data.signature_key;
 
         if (!signature_atlas.signature_test(entity_signature_key, component)) {
-            SignatureAtlasKey new_signature_key = signature_atlas.get_or_create_by_add(entity_signature_key, component);
+            SignatureAtlasKey new_signature_key = signature_atlas.get_or_create_key_by_add(entity_signature_key, {component});
 
             auto new_archetype_key_it = signature_to_archetype_key_map.find(new_signature_key);
             size_t new_archetype_key = new_archetype_key_it != signature_to_archetype_key_map.end()
@@ -189,7 +189,7 @@ export struct World {
 
         if (!signature_atlas.signature_test(entity_signature_key, component)) return false;
 
-        SignatureAtlasKey new_signature_key = signature_atlas.get_or_create_by_remove(entity_signature_key, component);
+        SignatureAtlasKey new_signature_key = signature_atlas.get_or_create_key_by_remove(entity_signature_key, {component});
 
         size_t entity_archetype_key = signature_to_archetype_key_map.at(entity_signature_key);
         assert(entity_archetype_key < archetypes.size());
