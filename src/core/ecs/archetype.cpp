@@ -28,16 +28,31 @@ export struct Archetype {
     size_t len;
     size_t cap;
 
+    std::flat_map<ComponentKey, size_t> component_offset_list;
+
     [[nodiscard]] static auto make(ComponentAtlas *component_atlas_ref, SignatureAtlas *signature_atlas_ref,
                                    SignatureAtlasKey signature_key) -> Archetype {
-        return Archetype{.component_atlas_ref = component_atlas_ref,
-                         .signature_atlas_ref = signature_atlas_ref,
-                         .signature_key = signature_key,
-                         .table_raw = nullptr,
-                         .owner_raw = nullptr,
-                         .row_size = handle_cal_row_size(component_atlas_ref, signature_atlas_ref->get(signature_key)),
-                         .len = 0,
-                         .cap = 0};
+        Archetype archetype =
+            Archetype{.component_atlas_ref = component_atlas_ref,
+                      .signature_atlas_ref = signature_atlas_ref,
+                      .signature_key = signature_key,
+                      .table_raw = nullptr,
+                      .owner_raw = nullptr,
+                      .row_size = handle_cal_row_size(component_atlas_ref, signature_atlas_ref->get(signature_key)),
+                      .len = 0,
+                      .cap = 0};
+        size_t offset = 0;
+        for (ComponentKey c : SignatureView(signature_atlas_ref->get(signature_key))) {
+            ComponentData c_data = component_atlas_ref->get(c);
+
+            offset = align_up(offset, c_data.align);
+
+            archetype.component_offset_list[c] = offset;
+
+            offset += c_data.size;
+        }
+
+        return archetype;
     }
 
     auto destroy() const {
@@ -103,20 +118,8 @@ export struct Archetype {
         return table_raw + index * row_size;
     }
     [[nodiscard]] auto get_component_row_offset(ComponentKey component) const -> size_t {
-        size_t res = 0;
-
-        for (ComponentKey c : SignatureView(signature_atlas_ref->get(signature_key))) {
-            ComponentData c_data = component_atlas_ref->get(c);
-
-            if (c == component) {
-                res = align_up(res, c_data.align);
-                break;
-            }
-
-            res = align_up(res, c_data.align) + c_data.size;
-        }
-
-        return res;
+        assert(component_offset_list.contains(component));
+        return component_offset_list.at(component);
     }
     [[nodiscard]] auto get_component_ptr(size_t index, ComponentKey component) const -> const void * {
         return (const char *)get_row_ptr(index) + get_component_row_offset(component);
