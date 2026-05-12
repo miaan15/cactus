@@ -81,8 +81,7 @@ export struct World {
 
         const EntityData entity_data = entities_data.get(entity).value();
 
-        const Signature entity_signature = signature_atlas.get(entity_data.signature_key);
-        if (!entity_signature.test(component)) return {};
+        if (!signature_atlas.signature_test(entity_data.signature_key, component)) return {};
 
         assert(signature_to_archetype_key_map.contains(entity_data.signature_key));
         size_t entity_archetype_key = signature_to_archetype_key_map.at(entity_data.signature_key);
@@ -114,8 +113,7 @@ export struct World {
 
         const EntityData entity_data = entities_data.get(entity).value();
 
-        const Signature entity_signature = signature_atlas.get(entity_data.signature_key);
-        if (!entity_signature.test(component)) return false;
+        if (!signature_atlas.signature_test(entity_data.signature_key, component)) return false;
 
         assert(signature_to_archetype_key_map.contains(entity_data.signature_key));
         size_t entity_archetype_key = signature_to_archetype_key_map.at(entity_data.signature_key);
@@ -135,11 +133,8 @@ export struct World {
         const EntityData entity_data = entities_data.get(entity).value();
         const SignatureAtlasKey entity_signature_key = entity_data.signature_key;
 
-        const Signature entity_signature = signature_atlas.get(entity_signature_key);
-
-        if (!entity_signature.test(component)) {
+        if (!signature_atlas.signature_test(entity_signature_key, component)) {
             SignatureAtlasKey new_signature_key = signature_atlas.get_or_create_by_add(entity_signature_key, component);
-            const Signature new_signature = signature_atlas.get(new_signature_key);
 
             auto new_archetype_key_it = signature_to_archetype_key_map.find(new_signature_key);
             size_t new_archetype_key = new_archetype_key_it != signature_to_archetype_key_map.end()
@@ -150,12 +145,12 @@ export struct World {
             }
 
             assert(new_archetype_key < archetypes.size());
-            size_t new_row_index = archetypes[new_archetype_key].append();
+            size_t new_row_index = archetypes[new_archetype_key].append(entity);
 
             Archetype new_archetype = archetypes[new_archetype_key];
             *(T *)new_archetype.get_component_ptr(new_row_index, component) = val;
 
-            if (!entity_signature.none()) {
+            if (entity_signature_key != EMPTY_SIGNATURE_KEY) {
                 size_t entity_archetype_key = signature_to_archetype_key_map.at(entity_signature_key);
                 assert(entity_archetype_key < archetypes.size());
 
@@ -164,6 +159,7 @@ export struct World {
                 Archetype *new_archetype_ptr = &archetypes[new_archetype_key];
                 Archetype *entity_archetype_ptr = &archetypes[entity_archetype_key];
                 handle_copy_row(*entity_archetype_ptr, entity_data.archetype_row_index, new_archetype_ptr, new_row_index);
+
                 assert(entity_archetype_key < archetypes.size());
                 archetypes[entity_archetype_key].remove(entity_data.archetype_row_index);
             }
@@ -191,17 +187,14 @@ export struct World {
         const EntityData entity_data = entities_data.get(entity).value();
         const SignatureAtlasKey entity_signature_key = entity_data.signature_key;
 
-        const Signature entity_signature = signature_atlas.get(entity_signature_key);
-
-        if (!entity_signature.test(component)) return false;
+        if (!signature_atlas.signature_test(entity_signature_key, component)) return false;
 
         SignatureAtlasKey new_signature_key = signature_atlas.get_or_create_by_remove(entity_signature_key, component);
-        const Signature new_signature = signature_atlas.get(new_signature_key);
 
         size_t entity_archetype_key = signature_to_archetype_key_map.at(entity_signature_key);
         assert(entity_archetype_key < archetypes.size());
 
-        if (new_signature.none()) {
+        if (new_signature_key == EMPTY_SIGNATURE_KEY) {
             archetypes[entity_archetype_key].remove(entity_data.archetype_row_index);
 
             entities_data.set(entity, EntityData{.signature_key = EMPTY_SIGNATURE_KEY, .archetype_row_index = 0});
@@ -218,7 +211,7 @@ export struct World {
         }
 
         assert(new_archetype_key < archetypes.size());
-        size_t new_row_index = archetypes[new_archetype_key].append();
+        size_t new_row_index = archetypes[new_archetype_key].append(entity);
 
         const Archetype entity_archetype = archetypes[entity_archetype_key];
         Archetype *new_archetype = &archetypes[new_archetype_key];

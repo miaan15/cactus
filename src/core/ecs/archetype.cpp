@@ -6,6 +6,7 @@ export module cactus.core.ecs:archetype;
 
 import :component;
 import :signature;
+import :entity;
 
 import std;
 
@@ -22,6 +23,7 @@ export struct Archetype {
     SignatureAtlasKey signature_key;
 
     char *table_raw;
+    Entity *owner_raw;
     size_t row_size;
     size_t len;
     size_t cap;
@@ -32,27 +34,37 @@ export struct Archetype {
                          .signature_atlas_ref = signature_atlas_ref,
                          .signature_key = signature_key,
                          .table_raw = nullptr,
+                         .owner_raw = nullptr,
                          .row_size = handle_cal_row_size(component_atlas_ref, signature_atlas_ref->get(signature_key)),
                          .len = 0,
                          .cap = 0};
     }
 
-    auto destroy() const { std::free(table_raw); }
+    auto destroy() const {
+        std::free(table_raw);
+        std::free(owner_raw);
+    }
 
     auto reserve(size_t new_cap) {
         if (new_cap <= cap) return;
 
         char *new_table_raw = (char *)std::malloc(new_cap * row_size);
+        Entity *new_owner_raw = (Entity *)std::malloc(new_cap * sizeof(Entity));
 
         if (table_raw != nullptr) {
             std::memcpy(new_table_raw, table_raw, len * row_size);
             std::free(table_raw);
         }
+        if (owner_raw != nullptr) {
+            std::memcpy(new_owner_raw, owner_raw, len * sizeof(Entity));
+            std::free(owner_raw);
+        }
 
         table_raw = new_table_raw;
+        owner_raw = new_owner_raw;
         cap = new_cap;
     }
-    auto append() -> size_t {
+    auto append(const Entity &entity_owner) -> size_t {
         if (len >= cap) {
             size_t new_cap = cap * 2;
             if (new_cap < 4) new_cap = 4;
@@ -64,6 +76,8 @@ export struct Archetype {
         char *last_row_ptr = table_raw + (len - 1) * row_size;
         std::memset(last_row_ptr, 0, row_size);
 
+        owner_raw[len - 1] = entity_owner;
+
         return len - 1;
     }
     auto remove(size_t index) -> bool {
@@ -72,6 +86,8 @@ export struct Archetype {
         char *t_row_ptr = table_raw + index * row_size;
         char *last_row_ptr = table_raw + (len - 1) * row_size;
         std::memcpy(t_row_ptr, last_row_ptr, row_size);
+
+        owner_raw[index] = owner_raw[len - 1];
 
         --len;
 
@@ -107,6 +123,11 @@ export struct Archetype {
     }
     [[nodiscard]] auto get_component_ptr(size_t index, ComponentKey component) -> void * {
         return (char *)get_row_ptr(index) + get_component_row_offset(component);
+    }
+
+    [[nodiscard]] auto get_owner(size_t index) const -> Entity {
+        assert(index < len);
+        return owner_raw[index];
     }
 };
 

@@ -93,10 +93,26 @@ export struct SignatureAtlas {
 
         if (signatures[key].test(component)) return key;
 
-        auto cache_it = add_transition_cache_map.find(std::make_pair(key, component));
+        auto cache_key = std::make_pair(key, component);
+        auto cache_it = add_transition_cache_map.find(cache_key);
         if (cache_it != add_transition_cache_map.end()) return cache_it->second;
 
-        return {};
+        Signature new_signature = signatures[key];
+        new_signature.set(component);
+
+        SignatureAtlasKey new_key = signatures.size();
+
+        for (size_t i = 0; i < signatures.size(); ++i) {
+            if (signatures[i] == new_signature) {
+                new_key = i;
+
+                break;
+            }
+        }
+
+        if (new_key >= signatures.size()) return {};
+
+        return new_key;
     }
 
     [[nodiscard]] auto get_or_create_by_add(SignatureAtlasKey key, ComponentKey component) -> SignatureAtlasKey {
@@ -112,16 +128,22 @@ export struct SignatureAtlas {
         Signature new_signature = signatures[key];
         new_signature.set(component);
 
+        SignatureAtlasKey new_key = signatures.size();
+
         for (size_t i = 0; i < signatures.size(); ++i) {
             if (signatures[i] == new_signature) {
                 add_transition_cache_map[cache_key] = i;
-                return i;
+                new_key = i;
+
+                break;
             }
         }
 
-        SignatureAtlasKey new_key = signatures.size();
-        signatures.push_back(new_signature);
+        if (new_key >= signatures.size()) signatures.push_back(new_signature);
+
         add_transition_cache_map[cache_key] = new_key;
+        remove_transition_cache_map[std::make_pair(new_key, component)] = key;
+
         return new_key;
     }
 
@@ -131,10 +153,30 @@ export struct SignatureAtlas {
 
         if (!signatures[key].test(component)) return key;
 
-        auto cache_it = remove_transition_cache_map.find(std::make_pair(key, component));
+        auto cache_key = std::make_pair(key, component);
+        auto cache_it = remove_transition_cache_map.find(cache_key);
         if (cache_it != remove_transition_cache_map.end()) return cache_it->second;
 
-        return {};
+        Signature new_signature = signatures[key];
+        new_signature.reset(component);
+
+        SignatureAtlasKey new_key = signatures.size();
+
+        if (new_signature.none()) {
+            new_key = EMPTY_SIGNATURE_KEY;
+        } else {
+            for (size_t i = 0; i < signatures.size(); ++i) {
+                if (signatures[i] == new_signature) {
+                    new_key = i;
+
+                    break;
+                }
+            }
+        }
+
+        if (new_key >= signatures.size()) return {};
+
+        return new_key;
     }
 
     [[nodiscard]] auto get_or_create_by_remove(SignatureAtlasKey key, ComponentKey component) -> SignatureAtlasKey {
@@ -150,32 +192,47 @@ export struct SignatureAtlas {
         Signature new_signature = signatures[key];
         new_signature.reset(component);
 
-        for (size_t i = 0; i < signatures.size(); ++i) {
-            if (signatures[i] == new_signature) {
-                remove_transition_cache_map[cache_key] = i;
-                return i;
+        SignatureAtlasKey new_key = signatures.size();
+
+        if (new_signature.none()) {
+            new_key = EMPTY_SIGNATURE_KEY;
+        } else {
+            for (size_t i = 0; i < signatures.size(); ++i) {
+                if (signatures[i] == new_signature) {
+                    remove_transition_cache_map[cache_key] = i;
+                    new_key = i;
+
+                    break;
+                }
             }
         }
 
-        SignatureAtlasKey new_key = signatures.size();
-        signatures.push_back(new_signature);
+        if (new_key >= signatures.size()) signatures.push_back(new_signature);
+
         remove_transition_cache_map[cache_key] = new_key;
+        add_transition_cache_map[std::make_pair(new_key, component)] = key;
+
         return new_key;
     }
 
-    [[nodiscard]] auto signature_test(SignatureAtlasKey key, size_t pos) const -> bool {
+    [[nodiscard]] auto signature_test(SignatureAtlasKey key, ComponentKey component) const -> bool {
         assert(key < signatures.size());
-        return signatures[key].test(pos);
+        return signatures[key].test(component);
     }
 
-    auto signature_set(SignatureAtlasKey key, size_t pos) {
+    [[nodiscard]] auto signature_none(SignatureAtlasKey key) const -> bool {
         assert(key < signatures.size());
-        signatures[key].set(pos);
+        return signatures[key].none();
     }
 
-    auto signature_reset(SignatureAtlasKey key, size_t pos) {
+    auto signature_set(SignatureAtlasKey key, ComponentKey component) {
         assert(key < signatures.size());
-        signatures[key].reset(pos);
+        signatures[key].set(component);
+    }
+
+    auto signature_reset(SignatureAtlasKey key, ComponentKey component) {
+        assert(key < signatures.size());
+        signatures[key].reset(component);
     }
 };
 
