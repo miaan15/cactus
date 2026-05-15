@@ -10,7 +10,8 @@ cd ./vendor
 # - raylib
 # - glm
 # - spdlog
-# - gtest
+#
+# - doctest
 
 mkdir -p .
 
@@ -26,6 +27,6 @@ if [ ! -d "./spdlog" ]; then
     git clone --depth 1 --branch v1.17.0 https://github.com/gabime/spdlog.git ./spdlog
 fi
 
-if [ ! -d "./gtest" ]; then
-    git clone --depth 1 --branch v1.17.0 https://github.com/google/googletest.git ./gtest
+if [ ! -d "./doctest" ]; then
+    git clone --depth 1 --branch v2.5.2 https://github.com/doctest/doctest.git ./doctest
 fi

@@ -1,6 +1,8 @@
-# Only support Clang and libc++ (for now, till all support c++ mods) // TODO
+# Only support Clang and libc++ (for now, till all support c++ modules) // TODO
+
 cmake_minimum_required(VERSION 3.29)
 
+# Check Clang
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/require_clang.cmake)
 
 project(cactus LANGUAGES CXX)
@@ -11,16 +13,29 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
+# Check libc++
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/require_libcxx.cmake)
 
+# ---------------------------------------------------------
 # Options
+# ---------------------------------------------------------
+# Build type
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Build type" FORCE)
 endif()
 
+# Asan
 option(USE_ASAN "Enable AddressSanitizer" OFF)
 
+# Lib type
+option(BUILD_SHARED_LIBS "Build as shared/dynamic library" OFF)
+
+# Test
+option(CACTUS_BUILD_TESTS "Build the unit tests" OFF)
+
+# ---------------------------------------------------------
 # Platforms
+# ---------------------------------------------------------
 if(WIN32)
     message(STATUS "Platform: Windows")
 elseif(APPLE)
@@ -31,7 +46,9 @@ else()
     message(WARNING "Platform: Unknown")
 endif()
 
-# Fetch
+# ---------------------------------------------------------
+# Fetching
+# ---------------------------------------------------------
 message(STATUS "Running vendor fetch script...")
 set(FETCH_VENDORS_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/fetch_vendors.sh)
 file(CHMOD "${FETCH_VENDORS_SCRIPT}"
@@ -45,58 +62,86 @@ execute_process(
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
 )
 
-# Set vars
+# ---------------------------------------------------------
+# Vars
+# ---------------------------------------------------------
 set(VENDOR_DIR ${CMAKE_SOURCE_DIR}/vendor)
-set(MODS_DIR ${CMAKE_SOURCE_DIR}/mods)
+set(MODULE_DIR ${CMAKE_SOURCE_DIR}/modules)
 set(SRC_DIR ${CMAKE_SOURCE_DIR}/src)
 set(DEMO_DIR ${CMAKE_SOURCE_DIR}/demo)
 set(TEST_DIR ${CMAKE_SOURCE_DIR}/test)
-file(GLOB_RECURSE SRCS CONFIGURE_DEPENDS "${SRC_DIR}/*.cpp")
 set(INC_DIRS
     ${VENDOR_DIR}/raylib/src
     ${VENDOR_DIR}/spdlog/include
 )
+file(GLOB_RECURSE SRCS CONFIGURE_DEPENDS "${SRC_DIR}/*.cpp")
+file(GLOB_RECURSE SRC_MODULES CONFIGURE_DEPENDS "${SRC_DIR}/*.cppm")
 
+# ---------------------------------------------------------
+# Flags
+# ---------------------------------------------------------
 if(USE_ASAN)
     add_compile_options(-fsanitize=address -fno-omit-frame-pointer -g)
     add_link_options(-fsanitize=address)
 endif()
 
-# Set modules
-set(MOD_SOURCES
+add_compile_options(-ftime-trace)
+
+# ---------------------------------------------------------
+# Create target
+# ---------------------------------------------------------
+# Modules
+set(MODULE_FILES
     ${SRCS}
-    ${MODS_DIR}/std/std.cppm
-    ${MODS_DIR}/raylib/raylib.cppm
+    ${SRC_MODULES}
+    ${MODULE_DIR}/std/std.cppm
+    ${MODULE_DIR}/raylib/raylib.cppm
     ${VENDOR_DIR}/glm/glm/glm.cppm
-    ${MODS_DIR}/spdlog/spdlog.cppm
+    ${MODULE_DIR}/spdlog/spdlog.cppm
 )
 set(LIBS
     # TODO
 )
 
-# Build libraries
-set(BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
-add_subdirectory(${VENDOR_DIR}/gtest)
+# Build cactus
+add_library(cactus ${SRCS})
 
-# Create target macros
-macro(create_target_test TEST_NAME TEST_SOURCE)
-    add_executable(${TEST_NAME} ${TEST_SOURCE})
-    set_target_properties(${TEST_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/test")
+target_sources(cactus PUBLIC 
+    FILE_SET CXX_MODULES FILES ${MODULE_FILES}
+)
 
-    target_sources(${TEST_NAME} PRIVATE FILE_SET CXX_MODULES FILES ${MOD_SOURCES} ${MODS_DIR}/gtest/gtest.cppm)
-    target_include_directories(${TEST_NAME} PRIVATE ${INC_DIRS} ${VENDOR_DIR}/gtest/googletest/include)
-    target_link_libraries(${TEST_NAME} PRIVATE ${LIBS} gtest)
+target_include_directories(cactus PUBLIC ${INC_DIRS})
+target_link_libraries(cactus PUBLIC ${LIBS})
 
-    add_test(NAME CACTUS_TESTS COMMAND ${TEST_NAME})
-endmacro()
+# ---------------------------------------------------------
+# Test
+# ---------------------------------------------------------
+if(CACTUS_BUILD_TESTS)
+    enable_testing()
 
-# Testing
-enable_testing()
+    function(create_target_test TEST_NAME TEST_SOURCE)
+        add_executable(${TEST_NAME} ${TEST_SOURCE})
 
-file(GLOB_RECURSE TEST_SRCS CONFIGURE_DEPENDS "${TEST_DIR}/*.cpp")
-foreach(TEST_SOURCE IN LISTS TEST_SRCS) 
-    get_filename_component(TEST_SOURCE_NAME "${TEST_SOURCE}" NAME)
-    set(TEST_NAME "${TEST_SOURCE_NAME}_test")
-    create_target_test(${TEST_NAME} ${TEST_SOURCE})
-endforeach()
+        set_target_properties(${TEST_NAME} PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/test"
+        )
 
+        target_link_libraries(${TEST_NAME} PRIVATE
+            cactus
+        )
+
+        target_include_directories(${TEST_NAME} PRIVATE 
+            "${VENDOR_DIR}/doctest/doctest"
+        )
+
+        add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
+    endfunction()
+
+    file(GLOB_RECURSE TEST_SRCS CONFIGURE_DEPENDS "${TEST_DIR}/*.cpp")
+    foreach(TEST_SOURCE IN LISTS TEST_SRCS) 
+        get_filename_component(TEST_SOURCE_NAME "${TEST_SOURCE}" NAME_WE)
+        set(TEST_NAME "${TEST_SOURCE_NAME}_test")
+
+        create_target_test(${TEST_NAME} ${TEST_SOURCE})
+    endforeach()
+endif()
