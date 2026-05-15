@@ -27,6 +27,9 @@ endif()
 # Asan
 option(USE_ASAN "Enable AddressSanitizer" OFF)
 
+# Build lib
+option(BUILD_LIB "Build as library" OFF)
+
 # Lib type
 option(BUILD_SHARED_LIBS "Build as shared/dynamic library" OFF)
 
@@ -71,6 +74,8 @@ set(SRC_DIR ${CMAKE_SOURCE_DIR}/src)
 set(DEMO_DIR ${CMAKE_SOURCE_DIR}/demo)
 set(TEST_DIR ${CMAKE_SOURCE_DIR}/test)
 set(INC_DIRS
+    ${VENDOR_DIR}/eabase/include/Common
+    ${VENDOR_DIR}/eastl/include
     ${VENDOR_DIR}/raylib/src
     ${VENDOR_DIR}/spdlog/include
 )
@@ -95,23 +100,33 @@ set(MODULE_FILES
     ${SRCS}
     ${SRC_MODULES}
     ${MODULE_DIR}/std/std.cppm
+    ${MODULE_DIR}/eastl/eastl.cppm
     ${MODULE_DIR}/raylib/raylib.cppm
     ${VENDOR_DIR}/glm/glm/glm.cppm
     ${MODULE_DIR}/spdlog/spdlog.cppm
 )
 set(LIBS
-    # TODO
+    EASTL
 )
 
-# Build cactus
-add_library(cactus ${SRCS})
+# ---------------------------------------------------------
+# Libs subdirectory
+# ---------------------------------------------------------
+add_subdirectory(${VENDOR_DIR}/eastl)
 
-target_sources(cactus PUBLIC 
-    FILE_SET CXX_MODULES FILES ${MODULE_FILES}
-)
+# ---------------------------------------------------------
+# To lib
+# ---------------------------------------------------------
+if(BUILD_LIB)
+    add_library(cactus ${SRCS})
 
-target_include_directories(cactus PUBLIC ${INC_DIRS})
-target_link_libraries(cactus PUBLIC ${LIBS})
+    target_sources(cactus PUBLIC 
+        FILE_SET CXX_MODULES FILES ${MODULE_FILES}
+    )
+
+    target_include_directories(cactus PUBLIC ${INC_DIRS})
+    target_link_libraries(cactus PUBLIC ${LIBS})
+endif()
 
 # ---------------------------------------------------------
 # Test
@@ -126,13 +141,15 @@ if(CACTUS_BUILD_TESTS)
             RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/test"
         )
 
-        target_link_libraries(${TEST_NAME} PRIVATE
-            cactus
+        target_sources(${TEST_NAME} PRIVATE 
+            FILE_SET CXX_MODULES FILES ${MODULE_FILES}
         )
 
         target_include_directories(${TEST_NAME} PRIVATE 
+            ${INC_DIRS}
             "${VENDOR_DIR}/doctest/doctest"
         )
+        target_link_libraries(${TEST_NAME} PRIVATE ${LIBS})
 
         add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
     endfunction()
