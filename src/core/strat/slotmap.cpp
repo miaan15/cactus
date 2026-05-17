@@ -58,7 +58,7 @@ export template <typename T, typename Alloc = std::allocator<T>> struct SlotMap 
         };
     }
 
-    auto destroy() const {
+    auto destroy() {
         auto slot_alloc = this->slots.get_allocator();
 
         if (this->data_raw != nullptr) {

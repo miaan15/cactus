@@ -8,7 +8,7 @@ using size_t = std::size_t;
 
 namespace cactus {
 
-template <typename T, typename Alloc = std::allocator<T>> struct FixedArr {
+export template <typename T, typename Alloc = std::allocator<T>> struct FixedArr {
     using AllocTraits = std::allocator_traits<Alloc>;
 
     T *data_raw;
@@ -18,11 +18,11 @@ template <typename T, typename Alloc = std::allocator<T>> struct FixedArr {
 
     [[nodiscard]] static auto make(size_t len) -> FixedArr {
         auto alloc = Alloc();
-        T *data_raw = AllocTraits::allocate(Alloc(), len);
+        T *data_raw = AllocTraits::allocate(alloc, len);
         return FixedArr{.data_raw = data_raw, .len = len, .allocator = alloc};
     }
 
-    auto destroy() const { AllocTraits::deallocate(allocator, data_raw, len); }
+    auto destroy() { AllocTraits::deallocate(allocator, data_raw, len); }
 
     auto set(size_t index, const T &val) -> bool {
         if (index >= len) return false;

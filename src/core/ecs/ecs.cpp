@@ -1,3 +1,329 @@
 module;
 
+#include <cassert>
+
 export module cactus.core.ecs;
+
+import std;
+import cactus.core.strat;
+
+using size_t = std::size_t;
+
+namespace cactus {
+
+[[nodiscard]] static constexpr auto align_up(size_t offset, size_t align) -> size_t {
+    return (offset + align - 1) & ~(align - 1);
+}
+
+export constexpr size_t MAX_WORLD_COMPONENTS_COUNT = 32;
+
+export template <typename... Ts>
+    requires(sizeof...(Ts) <= MAX_WORLD_COMPONENTS_COUNT && sizeof...(Ts) > 0)
+struct WorldComponentsRegister {
+    template <size_t I> using component_at_t = typename std::tuple_element<I, std::tuple<Ts...>>::type;
+
+    [[nodiscard]] auto size() const { return sizeof...(Ts); }
+
+    template <size_t I> [[nodiscard]] constexpr auto get_size() -> size_t {
+        static_assert(I < sizeof...(Ts), "Component index out of bounds");
+        return sizeof(component_at_t<I>);
+    }
+    template <size_t I> [[nodiscard]] constexpr auto get_align() -> size_t {
+        static_assert(I < sizeof...(Ts), "Component index out of bounds");
+        return alignof(component_at_t<I>);
+    }
+
+    [[nodiscard]] constexpr auto get_total_size() -> size_t {
+        size_t res = 0;
+        size_t max_align = 1;
+        (..., (max_align = std::max(max_align, alignof(Ts)), res = align_up(res, alignof(Ts)) + sizeof(Ts)));
+        return align_up(res, max_align);
+    }
+};
+
+export using Entity = SlotMapKey;
+export using Signature = std::bitset<MAX_WORLD_COMPONENTS_COUNT>;
+struct SignatureHasher {
+    auto operator()(const Signature &s) const -> size_t { return static_cast<size_t>(s.to_ullong()); }
+};
+
+struct ComponentData {
+    size_t size, align;
+};
+
+struct WorldDataTable {
+    char *table_raw;
+    Entity *owner_list_raw;
+    size_t row_size;
+    size_t len;
+    size_t cap;
+
+    FixedArr<size_t> component_offset_list;
+
+    [[nodiscard]] static auto make(Signature signature, size_t component_count,
+                                   const FixedArr<ComponentData> &component_data_list) -> WorldDataTable {
+        auto component_offset_list = FixedArr<size_t>::make(component_count);
+        size_t offset = 0;
+        size_t max_align = 1;
+
+        auto signature_ull = signature.to_ullong();
+        for (auto signature_ull = signature.to_ullong(); signature_ull > 0; signature_ull &= (signature_ull - 1)) {
+            int component_index = __builtin_ctzll(signature_ull);
+            auto component_data = component_data_list.get(component_index);
+
+            offset = align_up(offset, component_data->align);
+
+            component_offset_list.set(component_index, offset);
+
+            offset += component_data->size;
+
+            max_align = std::max(max_align, component_data->align);
+        }
+
+        return WorldDataTable{.table_raw = nullptr,
+                              .owner_list_raw = nullptr,
+                              .row_size = align_up(offset, max_align),
+                              .len = 0,
+                              .cap = 0,
+                              .component_offset_list = component_offset_list};
+    }
+
+    auto destroy() {
+        std::free(table_raw);
+        std::free(owner_list_raw);
+        component_offset_list.destroy();
+    }
+
+    [[nodiscard]] auto get_row_ptr(size_t row_index) const -> const void * {
+        assert(row_index < len);
+        return table_raw + row_index * row_size;
+    }
+    [[nodiscard]] auto get_row_ptr(size_t row_index) -> void * {
+        assert(row_index < len);
+        return table_raw + row_index * row_size;
+    }
+
+    [[nodiscard]] auto get_component_offset(size_t component_index) const -> size_t {
+        assert(component_index < component_offset_list.len);
+        return component_offset_list.data_raw[component_index];
+    }
+
+    [[nodiscard]] auto get_component_ptr(size_t row_index, size_t component_index) const -> const void * {
+        return (const char *)get_row_ptr(row_index) + get_component_offset(component_index);
+    }
+    [[nodiscard]] auto get_component_ptr(size_t row_index, size_t component_index) -> void * {
+        return (char *)get_row_ptr(row_index) + get_component_offset(component_index);
+    }
+
+    auto reserve(size_t new_cap) {
+        if (new_cap <= cap) return;
+
+        char *new_table_raw = (char *)std::malloc(new_cap * row_size);
+        Entity *new_owner_list_raw = (Entity *)std::malloc(new_cap * sizeof(Entity));
+
+        if (table_raw != nullptr) {
+            std::memcpy(new_table_raw, table_raw, len * row_size);
+            std::free(table_raw);
+        }
+        if (owner_list_raw != nullptr) {
+            std::memcpy(new_owner_list_raw, owner_list_raw, len * sizeof(Entity));
+            std::free(owner_list_raw);
+        }
+
+        table_raw = new_table_raw;
+        owner_list_raw = new_owner_list_raw;
+        cap = new_cap;
+    }
+    auto new_row(Entity entity_owner) -> size_t {
+        if (len >= cap) {
+            size_t new_cap = cap * 2;
+            if (new_cap < 4) new_cap = 4;
+            reserve(new_cap);
+        }
+
+        ++len;
+
+        char *last_row_ptr = table_raw + (len - 1) * row_size;
+        std::memset(last_row_ptr, 0, row_size);
+
+        owner_list_raw[len - 1] = entity_owner;
+
+        return len - 1;
+    }
+    auto remove_row(size_t index) -> bool {
+        if (index >= len) return false;
+
+        char *t_row_ptr = table_raw + index * row_size;
+        char *last_row_ptr = table_raw + (len - 1) * row_size;
+        std::memcpy(t_row_ptr, last_row_ptr, row_size);
+
+        owner_list_raw[index] = owner_list_raw[len - 1];
+
+        --len;
+
+        return true;
+    }
+};
+
+export struct World {
+    struct EntityData {
+        Signature signature;
+        size_t table_row_index;
+    };
+
+    SlotMap<EntityData> entities_data;
+
+    size_t component_count;
+    FixedArr<ComponentData> component_data_list;
+
+    std::unordered_map<Signature, size_t, SignatureHasher> signature_to_table_index_map;
+    std::vector<WorldDataTable> tables;
+
+    // ============================================================================================
+    template <typename... Ts> [[nodiscard]] static auto make() -> World {
+        WorldComponentsRegister<Ts...> component_register;
+
+        size_t component_count = component_register.size();
+        auto component_data_list = FixedArr<ComponentData>::make(component_count);
+
+        [&]<std::size_t... Is>(std::index_sequence<Is...>) {
+            (..., component_data_list.set(
+                      Is, {component_register.template get_size<Is>(), component_register.template get_align<Is>()}));
+        }(std::make_index_sequence<sizeof...(Ts)>{});
+
+        return World{.entities_data = SlotMap<EntityData>::make(),
+                     .component_count = component_count,
+                     .component_data_list = component_data_list,
+                     .signature_to_table_index_map{},
+                     .tables{}};
+    }
+
+    auto destroy() {
+        entities_data.destroy();
+        component_data_list.destroy();
+        for (auto &&table : tables) { table.destroy(); }
+    }
+
+    // ============================================================================================
+    [[nodiscard]] auto new_entity() -> Entity { return entities_data.push(EntityData{Signature{}, 0}); }
+
+    [[nodiscard]] auto has_entity(Entity entity) -> bool { return entities_data.has(entity); }
+
+    // component_ptr is not stable pointer
+    [[nodiscard]] auto get_component_ptr(Entity entity, size_t component_index) -> void * {
+        if (component_index >= component_count) return nullptr; // component out of bound
+        auto entity_data_opt = entities_data.get(entity);
+        if (!entity_data_opt.has_value()) return nullptr; // if entity not existed
+
+        Signature signature = entity_data_opt.value().signature;
+        assert((!signature.any() || signature_to_table_index_map.contains(signature)) &&
+               "entity's signature should be empty or already existed");
+
+        if (!signature.test(component_index)) return nullptr; // if entity's signature not has the component
+
+        size_t table_index = signature_to_table_index_map.at(signature);
+        assert(table_index < tables.size() && "table index shoule be existed");
+
+        return tables[table_index].get_component_ptr(entity_data_opt->table_row_index, component_index);
+    }
+    [[nodiscard]] auto get_component_ptr(Entity entity, size_t component_index) const -> const void * {
+        if (component_index >= component_count) return nullptr; // component out of bound
+        auto entity_data_opt = entities_data.get(entity);
+        if (!entity_data_opt.has_value()) return nullptr; // if entity not existed
+
+        Signature signature = entity_data_opt.value().signature;
+        assert((!signature.any() || signature_to_table_index_map.contains(signature)) &&
+               "entity's signature should be empty or already existed");
+
+        if (!signature.test(component_index)) return nullptr; // if entity's signature not has the component
+
+        size_t table_index = signature_to_table_index_map.at(signature);
+        assert(table_index < tables.size() && "table index shoule be existed");
+
+        return tables[table_index].get_component_ptr(entity_data_opt->table_row_index, component_index);
+    }
+
+    [[nodiscard]] auto has_component(Entity entity, size_t component_index) const -> bool {
+        if (component_index >= component_count) return false; // component out of bound
+        auto entity_data_opt = entities_data.get(entity);
+        if (!entity_data_opt.has_value()) return false;
+
+        Signature signature = entity_data_opt.value().signature;
+        assert((!signature.any() || signature_to_table_index_map.contains(signature)) &&
+               "entity's signature should be empty or already existed");
+
+        return signature.test(component_index);
+    }
+
+    [[nodiscard]] auto add_component(Entity entity, size_t component_index) -> void * {
+        if (component_index >= component_count) return nullptr; // component out of bound
+        auto entity_data_opt = entities_data.get(entity);
+        if (!entity_data_opt.has_value()) return nullptr; // if entity not existed
+
+        Signature cur_signature = entity_data_opt.value().signature;
+        assert((!cur_signature.any() || signature_to_table_index_map.contains(cur_signature)) &&
+               "entity's signature should be empty or already existed");
+
+        // if current signature already has the component, return that component ptr
+        if (cur_signature.test(component_index)) return get_component_ptr(entity, component_index);
+
+        Signature new_signature = cur_signature;
+        new_signature.set(component_index);
+
+        // get new table, create new table if needed
+        auto new_table_index_it = signature_to_table_index_map.find(new_signature);
+        size_t new_table_index;
+        if (new_table_index_it == signature_to_table_index_map.find(new_signature))
+            new_table_index = new_table(new_signature);
+        else
+            new_table_index = new_table_index_it->second;
+
+        // if current signature is empty or the entity has not existed in a table: just create new row in table
+        if (!cur_signature.any()) {
+            WorldDataTable &new_table = tables[new_table_index];
+            new_table.new_row(entity);
+            entities_data.set(entity, {new_signature, new_table.len - 1});
+        }
+        // else: move old data to new row, delete old row
+        else {
+            WorldDataTable &new_table = tables[new_table_index];
+            new_table.new_row(entity);
+
+            size_t cur_table_index = signature_to_table_index_map.at(cur_signature);
+            WorldDataTable &cur_table = tables[cur_table_index];
+
+            size_t cur_row_index = entity_data_opt.value().table_row_index;
+
+            char *cur_row_ptr = (char *)cur_table.get_row_ptr(cur_row_index);
+            char *new_row_ptr = (char *)new_table.get_row_ptr(new_table.len - 1);
+            for (auto cur_signature_ull = cur_signature.to_ullong(); cur_signature_ull > 0;
+                 cur_signature_ull &= (cur_signature_ull - 1)) {
+                int component_index = __builtin_ctzll(cur_signature_ull);
+                auto component_data = component_data_list.get(component_index);
+
+                void *src = cur_row_ptr + cur_table.get_component_offset(component_index);
+                void *dst = new_row_ptr + new_table.get_component_offset(component_index);
+                std::memcpy(dst, src, component_data->size);
+            }
+
+            cur_table.remove_row(cur_row_index);
+
+            entities_data.set(entity, {new_signature, new_table.len - 1});
+        }
+
+        WorldDataTable &new_table = tables[new_table_index];
+        return new_table.get_component_ptr(new_table.len - 1, component_index);
+    }
+
+private:
+    auto new_table(Signature signature) -> size_t {
+        assert(!signature_to_table_index_map.contains(signature) && "signature should not already existed");
+
+        tables.push_back(WorldDataTable::make(signature, component_count, component_data_list));
+        signature_to_table_index_map.insert({signature, tables.size() - 1});
+
+        return tables.size() - 1;
+    }
+};
+
+} // namespace cactus
