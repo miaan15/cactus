@@ -134,6 +134,7 @@ struct WorldDataTable {
         owner_list_raw = new_owner_list_raw;
         cap = new_cap;
     }
+
     auto new_row(Entity entity_owner) -> size_t {
         if (len >= cap) {
             size_t new_cap = cap * 2;
@@ -150,18 +151,27 @@ struct WorldDataTable {
 
         return len - 1;
     }
-    auto remove_row(size_t index) -> bool {
-        if (index >= len) return false;
 
-        char *t_row_ptr = table_raw + index * row_size;
-        char *last_row_ptr = table_raw + (len - 1) * row_size;
-        std::memcpy(t_row_ptr, last_row_ptr, row_size);
+    // return the entity owner of the last row if it require to be moved by this
+    auto remove_row(size_t index) -> std::optional<Entity> {
+        if (index >= len) return {};
 
-        owner_list_raw[index] = owner_list_raw[len - 1];
+        if (index != len - 1) {
+            Entity moved_entity = owner_list_raw[len - 1];
+
+            char *t_row_ptr = table_raw + index * row_size;
+            char *last_row_ptr = table_raw + (len - 1) * row_size;
+            std::memcpy(t_row_ptr, last_row_ptr, row_size);
+
+            owner_list_raw[index] = owner_list_raw[len - 1];
+
+            --len;
+
+            return moved_entity;
+        }
 
         --len;
-
-        return true;
+        return {};
     }
 };
 
@@ -273,7 +283,7 @@ export struct World {
         // get new table, create new table if needed
         auto new_table_index_it = signature_to_table_index_map.find(new_signature);
         size_t new_table_index;
-        if (new_table_index_it == signature_to_table_index_map.find(new_signature))
+        if (new_table_index_it == signature_to_table_index_map.end())
             new_table_index = new_table(new_signature);
         else
             new_table_index = new_table_index_it->second;
@@ -298,21 +308,84 @@ export struct World {
             char *new_row_ptr = (char *)new_table.get_row_ptr(new_table.len - 1);
             for (auto cur_signature_ull = cur_signature.to_ullong(); cur_signature_ull > 0;
                  cur_signature_ull &= (cur_signature_ull - 1)) {
-                int component_index = __builtin_ctzll(cur_signature_ull);
-                auto component_data = component_data_list.get(component_index);
+                size_t t_component_index = __builtin_ctzll(cur_signature_ull);
+                auto t_component_data = component_data_list.get(t_component_index);
 
-                void *src = cur_row_ptr + cur_table.get_component_offset(component_index);
-                void *dst = new_row_ptr + new_table.get_component_offset(component_index);
-                std::memcpy(dst, src, component_data->size);
+                void *src = cur_row_ptr + cur_table.get_component_offset(t_component_index);
+                void *dst = new_row_ptr + new_table.get_component_offset(t_component_index);
+                std::memcpy(dst, src, t_component_data->size);
             }
 
-            cur_table.remove_row(cur_row_index);
+            if (auto moved_entity_opt = cur_table.remove_row(cur_row_index)) {
+                Entity moved_entity = moved_entity_opt.value();
+                assert(entities_data.has(moved_entity) && "the entity in the last of table should already existed");
+
+                auto moved_entity_data = entities_data.get(moved_entity).value();
+                moved_entity_data.table_row_index = cur_row_index;
+                entities_data.set(moved_entity, moved_entity_data);
+            }
 
             entities_data.set(entity, {new_signature, new_table.len - 1});
         }
 
         WorldDataTable &new_table = tables[new_table_index];
         return new_table.get_component_ptr(new_table.len - 1, component_index);
+    }
+
+    [[nodiscard]] auto remove_component(Entity entity, size_t component_index) -> bool {
+        if (component_index >= component_count) return false; // component out of bound
+        auto entity_data_opt = entities_data.get(entity);
+        if (!entity_data_opt.has_value()) return false; // if entity not existed
+
+        Signature cur_signature = entity_data_opt.value().signature;
+        assert((!cur_signature.any() || signature_to_table_index_map.contains(cur_signature)) &&
+               "entity's signature should be empty or already existed");
+
+        if (!cur_signature.test(component_index)) return false;
+
+        Signature new_signature = cur_signature;
+        new_signature.reset(component_index);
+
+        // get new table, create new table if needed
+        auto new_table_index_it = signature_to_table_index_map.find(new_signature);
+        size_t new_table_index;
+        if (new_table_index_it == signature_to_table_index_map.end())
+            new_table_index = new_table(new_signature);
+        else
+            new_table_index = new_table_index_it->second;
+
+        WorldDataTable &new_table = tables[new_table_index];
+        new_table.new_row(entity);
+
+        size_t cur_table_index = signature_to_table_index_map.at(cur_signature);
+        WorldDataTable &cur_table = tables[cur_table_index];
+
+        size_t cur_row_index = entity_data_opt.value().table_row_index;
+
+        char *cur_row_ptr = (char *)cur_table.get_row_ptr(cur_row_index);
+        char *new_row_ptr = (char *)new_table.get_row_ptr(new_table.len - 1);
+        for (auto new_signature_ull = new_signature.to_ullong(); new_signature_ull > 0;
+             new_signature_ull &= (new_signature_ull - 1)) {
+            size_t t_component_index = __builtin_ctzll(new_signature_ull);
+            auto t_component_data = component_data_list.get(t_component_index);
+
+            void *src = cur_row_ptr + cur_table.get_component_offset(t_component_index);
+            void *dst = new_row_ptr + new_table.get_component_offset(t_component_index);
+            std::memcpy(dst, src, t_component_data->size);
+        }
+
+        if (auto moved_entity_opt = cur_table.remove_row(cur_row_index)) {
+            Entity moved_entity = moved_entity_opt.value();
+            assert(entities_data.has(moved_entity) && "the entity in the last of table should already existed");
+
+            auto moved_entity_data = entities_data.get(moved_entity).value();
+            moved_entity_data.table_row_index = cur_row_index;
+            entities_data.set(moved_entity, moved_entity_data);
+        }
+
+        entities_data.set(entity, {new_signature, new_table.len - 1});
+
+        return true;
     }
 
 private:
