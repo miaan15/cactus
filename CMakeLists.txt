@@ -1,20 +1,44 @@
-cmake_minimum_required(VERSION 4.1.4)
+# Only support Clang and libc++ (for now, till all support c++ modules) // TODO
 
-project(CACTUS LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.29)
+
+# Check Clang
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/require_clang.cmake)
+
+project(cactus LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
+# Check libc++
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/require_libcxx.cmake)
+
+# ---------------------------------------------------------
+# Options
+# ---------------------------------------------------------
+# Build type
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Build type" FORCE)
 endif()
 
+# Asan
 option(USE_ASAN "Enable AddressSanitizer" OFF)
 
+# Build lib
+option(BUILD_LIB "Build as library" OFF)
+
+# Lib type
+option(BUILD_SHARED_LIBS "Build as shared/dynamic library" OFF)
+
+# Test
+option(CACTUS_BUILD_TESTS "Build the unit tests" OFF)
+
+# ---------------------------------------------------------
+# Platforms
+# ---------------------------------------------------------
 if(WIN32)
     message(STATUS "Platform: Windows")
 elseif(APPLE)
@@ -25,101 +49,116 @@ else()
     message(WARNING "Platform: Unknown")
 endif()
 
+# ---------------------------------------------------------
+# Fetching
+# ---------------------------------------------------------
+message(STATUS "Running vendor fetch script...")
+set(FETCH_VENDORS_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/fetch_vendors.sh)
+file(CHMOD "${FETCH_VENDORS_SCRIPT}"
+    PERMISSIONS
+    OWNER_READ OWNER_WRITE OWNER_EXECUTE
+    GROUP_READ GROUP_EXECUTE
+    WORLD_READ WORLD_EXECUTE
+)
+execute_process(
+    COMMAND "${FETCH_VENDORS_SCRIPT}"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+
+# ---------------------------------------------------------
+# Vars
+# ---------------------------------------------------------
 set(VENDOR_DIR ${CMAKE_SOURCE_DIR}/vendor)
-set(SRC_DIR "${CMAKE_SOURCE_DIR}/src")
-set(DEMO_DIR "${CMAKE_SOURCE_DIR}/demo")
-set(TEST_DIR "${CMAKE_SOURCE_DIR}/test")
+set(MODULE_DIR ${CMAKE_SOURCE_DIR}/modules)
+set(SRC_DIR ${CMAKE_SOURCE_DIR}/src)
+set(DEMO_DIR ${CMAKE_SOURCE_DIR}/demo)
+set(TEST_DIR ${CMAKE_SOURCE_DIR}/test)
+set(INC_DIRS
+    ${VENDOR_DIR}/eabase/include/Common
+    ${VENDOR_DIR}/eastl/include
+    ${VENDOR_DIR}/raylib/src
+    ${VENDOR_DIR}/spdlog/include
+)
+file(GLOB_RECURSE SRCS CONFIGURE_DEPENDS "${SRC_DIR}/*.cpp")
+file(GLOB_RECURSE SRC_MODULES CONFIGURE_DEPENDS "${SRC_DIR}/*.cppm")
 
-add_subdirectory(${VENDOR_DIR}/sdl)
-add_subdirectory(${VENDOR_DIR}/sdl_image)
-add_subdirectory(${VENDOR_DIR}/sdl_shadercross)
-
+# ---------------------------------------------------------
+# Flags
+# ---------------------------------------------------------
 if(USE_ASAN)
     add_compile_options(-fsanitize=address -fno-omit-frame-pointer -g)
     add_link_options(-fsanitize=address)
 endif()
 
-add_subdirectory(${VENDOR_DIR}/glm)
-add_subdirectory(${VENDOR_DIR}/boost)
-add_subdirectory(${VENDOR_DIR}/spdlog)
-add_subdirectory(${VENDOR_DIR}/tuplet)
-add_subdirectory(${VENDOR_DIR}/gtest)
+add_compile_options(-ftime-trace)
 
-file(GLOB_RECURSE SRCS CONFIGURE_DEPENDS "${SRC_DIR}/*.cpp")
-file(GLOB_RECURSE DEMO_SRCS CONFIGURE_DEPENDS "${DEMO_DIR}/main.cpp")
-file(GLOB_RECURSE TEST_SRCS CONFIGURE_DEPENDS "${TEST_DIR}/main.cpp")
-
-set(INC_DIRS
-    ${VENDOR_DIR}/sdl/include
-    ${VENDOR_DIR}/sdl_image/include
-    ${VENDOR_DIR}/sdl_shadercross/include
-    ${VENDOR_DIR}/boost/libs/container_hash/include
-    ${VENDOR_DIR}/boost/libs/container/include
-    ${VENDOR_DIR}/boost/libs/functional/include
-    ${VENDOR_DIR}/boost/libs/unordered/include
-    ${VENDOR_DIR}/spdlog/include
-    ${VENDOR_DIR}/tuplet/include
-)
-set(TEST_INC_DIRS
-    ${INC_DIRS}
-    ${VENDOR_DIR}/gtest/googletest/include
-)
-
-set(MODS 
-    ${SRCS} 
+# ---------------------------------------------------------
+# Create target
+# ---------------------------------------------------------
+# Modules
+set(MODULE_FILES
+    ${SRCS}
+    ${SRC_MODULES}
+    ${MODULE_DIR}/std/std.cppm
+    ${MODULE_DIR}/eastl/eastl.cppm
+    ${MODULE_DIR}/raylib/raylib.cppm
     ${VENDOR_DIR}/glm/glm/glm.cppm
+    ${MODULE_DIR}/spdlog/spdlog.cppm
+)
+set(LIBS
+    EASTL
 )
 
-set(LINKS
-    SDL3::SDL3
-    SDL3_image::SDL3_image
-    SDL3_shadercross::SDL3_shadercross
-    Boost::container_hash
-    Boost::container
-    Boost::functional
-    Boost::unordered
-    spdlog::spdlog
-    tuplet::tuplet
-)
-set(TEST_LINKS
-    ${LINKS}
-    gtest
-)
+# ---------------------------------------------------------
+# Libs subdirectory
+# ---------------------------------------------------------
+add_subdirectory(${VENDOR_DIR}/eastl)
 
-macro(create_target_demo target exe_source)
-    add_executable(${target} ${exe_source})
-    set_target_properties(${target} PROPERTIES 
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/demo"
-    )
-    target_sources(${target}
-        PRIVATE FILE_SET CXX_MODULES FILES ${MODS}
-    )
-    target_include_directories(${target} PRIVATE ${INC_DIRS})
-    target_link_libraries(${target} PRIVATE ${LINKS})
-endmacro()
+# ---------------------------------------------------------
+# To lib
+# ---------------------------------------------------------
+if(BUILD_LIB)
+    add_library(cactus ${SRCS})
 
-macro(create_target_test target exe_source)
-    add_executable(${target} ${exe_source})
-    set_target_properties(${target} PROPERTIES 
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/test"
+    target_sources(cactus PUBLIC 
+        FILE_SET CXX_MODULES FILES ${MODULE_FILES}
     )
-    target_sources(${target}
-        PRIVATE FILE_SET CXX_MODULES FILES ${MODS}
-    )
-    target_include_directories(${target} PRIVATE ${TEST_INC_DIRS})
-    target_link_libraries(${target} PRIVATE ${TEST_LINKS})
-endmacro()
 
-foreach(source IN LISTS DEMO_SRCS) 
-    get_filename_component(parent_dir "${source}" DIRECTORY)
-    get_filename_component(folder "${parent_dir}" NAME)
-    set(target "${folder}_demo")
-    create_target_demo(${target} ${source})
-endforeach()
+    target_include_directories(cactus PUBLIC ${INC_DIRS})
+    target_link_libraries(cactus PUBLIC ${LIBS})
+endif()
 
-foreach(source IN LISTS TEST_SRCS) 
-    get_filename_component(parent_dir "${source}" DIRECTORY)
-    get_filename_component(folder "${parent_dir}" NAME)
-    set(target "${folder}_test")
-    create_target_test(${target} ${source})
-endforeach()
+# ---------------------------------------------------------
+# Test
+# ---------------------------------------------------------
+if(CACTUS_BUILD_TESTS)
+    enable_testing()
+
+    function(create_target_test TEST_NAME TEST_SOURCE)
+        add_executable(${TEST_NAME} ${TEST_SOURCE})
+
+        set_target_properties(${TEST_NAME} PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/test"
+        )
+
+        target_sources(${TEST_NAME} PRIVATE 
+            FILE_SET CXX_MODULES FILES ${MODULE_FILES}
+        )
+
+        target_include_directories(${TEST_NAME} PRIVATE 
+            ${INC_DIRS}
+            "${VENDOR_DIR}/doctest/doctest"
+        )
+        target_link_libraries(${TEST_NAME} PRIVATE ${LIBS})
+
+        add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
+    endfunction()
+
+    file(GLOB_RECURSE TEST_SRCS CONFIGURE_DEPENDS "${TEST_DIR}/*.cpp")
+    foreach(TEST_SOURCE IN LISTS TEST_SRCS) 
+        get_filename_component(TEST_SOURCE_NAME "${TEST_SOURCE}" NAME_WE)
+        set(TEST_NAME "${TEST_SOURCE_NAME}_test")
+
+        create_target_test(${TEST_NAME} ${TEST_SOURCE})
+    endforeach()
+endif()

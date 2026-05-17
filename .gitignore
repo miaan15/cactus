@@ -2,5 +2,6 @@ build/
 vendor/
 .cache/
 
-CLAUDE.md
 .github/
+
+CLAUDE.md
