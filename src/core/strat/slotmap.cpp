@@ -1,4 +1,5 @@
 module;
+
 export module cactus.core.strat:slotmap;
 
 import std;
@@ -140,12 +141,22 @@ export template <typename T, typename Alloc = std::allocator<T>> struct SlotMap 
 
         return this->data_raw[slot.index];
     }
-    [[nodiscard]] auto get_ptr(SlotMapKey key) -> std::optional<T *> {
+
+    [[nodiscard]] auto get_ptr(SlotMapKey key) -> T * {
         size_t index = key.index;
-        if (index >= this->slots.size()) return {};
+        if (index >= this->slots.size()) return nullptr;
 
         SlotMapKey slot = this->slots[index];
-        if (key.gen != slot.gen) return {};
+        if (key.gen != slot.gen) return nullptr;
+
+        return &this->data_raw[slot.index];
+    }
+    [[nodiscard]] auto get_ptr(SlotMapKey key) const -> const T * {
+        size_t index = key.index;
+        if (index >= this->slots.size()) return nullptr;
+
+        SlotMapKey slot = this->slots[index];
+        if (key.gen != slot.gen) return nullptr;
 
         return &this->data_raw[slot.index];
     }
