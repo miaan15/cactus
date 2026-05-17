@@ -643,6 +643,35 @@ export template <typename... Ts> struct World {
     auto remove_component(Entity entity) -> void {
         world_impl.remove_component(entity, {ComponentsRegisterType::template get_index<Us>()...});
     }
+
+    [[nodiscard]] auto is_entity_has_component(Entity entity, size_t component_index) -> bool {
+        return world_impl.is_entity_has_component(entity, component_index);
+    }
+
+    [[nodiscard]] auto get_component_ptr(Entity entity, size_t component_index) -> void * {
+        return world_impl.get_component_ptr(entity, component_index);
+    }
+    [[nodiscard]] auto get_component_ptr(Entity entity, size_t component_index) const -> const void * {
+        return world_impl.get_component_ptr(entity, component_index);
+    }
+
+    [[nodiscard]] auto has_component(Entity entity, size_t component_index) const -> bool {
+        return world_impl.has_component(entity, component_index);
+    }
+
+    auto add_component(Entity entity, size_t component_index) -> void * {
+        return world_impl.add_component(entity, component_index);
+    }
+    auto add_component(Entity entity, std::initializer_list<size_t> component_index_list) -> void {
+        world_impl.add_component(entity, component_index_list);
+    }
+
+    auto remove_component(Entity entity, size_t component_index) -> bool {
+        return world_impl.remove_component(entity, component_index);
+    }
+    auto remove_component(Entity entity, std::initializer_list<size_t> component_index_list) -> void {
+        world_impl.remove_component(entity, component_index_list);
+    }
 };
 
 } // namespace cactus
