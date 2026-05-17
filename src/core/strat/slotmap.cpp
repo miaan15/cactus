@@ -8,8 +8,10 @@ using size_t = std::size_t;
 namespace cactus {
 
 export struct SlotMapKey {
-    size_t index;
-    size_t gen;
+    size_t index : (sizeof(size_t) * 8) - 8;
+    size_t gen : 8;
+
+    operator size_t() const { return *reinterpret_cast<const size_t *>(this); }
 };
 
 export template <typename T, typename Alloc = std::allocator<T>> struct SlotMap {
@@ -87,7 +89,7 @@ export template <typename T, typename Alloc = std::allocator<T>> struct SlotMap 
         return SlotMapKey{.index = index, .gen = slot_ptr->gen};
     }
 
-    auto remove(const SlotMapKey &key) -> bool {
+    auto remove(SlotMapKey key) -> bool {
         if (key.index >= this->slots.size()) return false;
 
         SlotMapKey *slot_ptr = &this->slots[key.index];
@@ -118,7 +120,7 @@ export template <typename T, typename Alloc = std::allocator<T>> struct SlotMap 
         return true;
     }
 
-    auto set(const SlotMapKey &key, const T &val) -> bool {
+    auto set(SlotMapKey key, const T &val) -> bool {
         size_t index = key.index;
         if (index >= this->slots.size()) return false;
 
@@ -129,7 +131,7 @@ export template <typename T, typename Alloc = std::allocator<T>> struct SlotMap 
         return true;
     }
 
-    [[nodiscard]] auto get(const SlotMapKey &key) const -> std::optional<T> {
+    [[nodiscard]] auto get(SlotMapKey key) const -> std::optional<T> {
         size_t index = key.index;
         if (index >= this->slots.size()) return {};
 
@@ -138,7 +140,7 @@ export template <typename T, typename Alloc = std::allocator<T>> struct SlotMap 
 
         return this->data_raw[slot.index];
     }
-    [[nodiscard]] auto get_ptr(const SlotMapKey &key) -> std::optional<T *> {
+    [[nodiscard]] auto get_ptr(SlotMapKey key) -> std::optional<T *> {
         size_t index = key.index;
         if (index >= this->slots.size()) return {};
 
@@ -148,7 +150,7 @@ export template <typename T, typename Alloc = std::allocator<T>> struct SlotMap 
         return &this->data_raw[slot.index];
     }
 
-    [[nodiscard]] auto has(const SlotMapKey &key) const -> bool {
+    [[nodiscard]] auto has(SlotMapKey key) const -> bool {
         size_t index = key.index;
         if (index >= this->slots.size()) return false;
 
