@@ -20,12 +20,12 @@ export constexpr size_t MAX_WORLD_COMPONENTS_COUNT = 32;
 export template <typename... Ts>
     requires(sizeof...(Ts) <= MAX_WORLD_COMPONENTS_COUNT && sizeof...(Ts) > 0)
 struct WorldComponentsRegister {
-    [[nodiscard]] constexpr auto size() const -> size_t { return sizeof...(Ts); }
+    [[nodiscard]] static constexpr auto size() -> size_t { return sizeof...(Ts); }
 
-    template <typename T> [[nodiscard]] constexpr auto has() const -> bool { return (std::is_same_v<T, Ts> || ...); }
-    template <typename T> [[nodiscard]] constexpr auto get_index() const -> size_t {
+    template <typename T> [[nodiscard]] static constexpr auto has() -> bool { return (std::is_same_v<T, Ts> || ...); }
+    template <typename T> [[nodiscard]] static constexpr auto get_index() -> size_t {
         size_t i = 0, res = 0;
-        ((std::is_same_v<T, Ts> ? (res = i, false) : (++i, true)) && ...);
+        (void)((std::is_same_v<T, Ts> ? (res = i, false) : (++i, true)) && ...);
         return res;
     }
 
@@ -145,7 +145,7 @@ struct WorldDataTable {
     auto new_row(Entity entity_owner) -> size_t {
         if (len >= cap) {
             size_t new_cap = cap * 2;
-            if (new_cap < 4) new_cap = 4;
+            if (new_cap < 1) new_cap = 1;
             reserve(new_cap);
         }
 
@@ -178,6 +178,7 @@ struct WorldDataTable {
         }
 
         --len;
+
         return {};
     }
 };
@@ -225,6 +226,17 @@ struct WorldImpl {
     [[nodiscard]] auto new_entity() -> Entity { return entities_data.push(EntityData{Signature{}, 0}); }
 
     [[nodiscard]] auto has_entity(Entity entity) -> bool { return entities_data.has(entity); }
+
+    [[nodiscard]] auto get_entity_signature(Entity entity) -> std::optional<Signature> {
+        return entities_data.get(entity).transform([](auto data) { return data.signature; });
+    }
+
+    [[nodiscard]] auto is_entity_has_component(Entity entity, size_t component_index) -> bool {
+        if (component_index >= component_count) return false; // component out of bound
+        auto entity_data_opt = entities_data.get(entity);
+        if (!entity_data_opt.has_value()) return false;
+        return entity_data_opt.value().signature.test(component_index);
+    }
 
     // component_ptr is not stable pointer
     [[nodiscard]] auto get_component_ptr(Entity entity, size_t component_index) -> void * {
@@ -290,10 +302,11 @@ struct WorldImpl {
         // get new table, create new table if needed
         auto new_table_index_it = signature_to_table_index_map.find(new_signature);
         size_t new_table_index;
-        if (new_table_index_it == signature_to_table_index_map.end())
+        if (new_table_index_it == signature_to_table_index_map.end()) {
             new_table_index = new_table(new_signature);
-        else
+        } else {
             new_table_index = new_table_index_it->second;
+        }
 
         // if current signature is empty or the entity has not existed in a table: just create new row in table
         if (!cur_signature.any()) {
@@ -356,10 +369,11 @@ struct WorldImpl {
         // get new table, create new table if needed
         auto new_table_index_it = signature_to_table_index_map.find(new_signature);
         size_t new_table_index;
-        if (new_table_index_it == signature_to_table_index_map.end())
+        if (new_table_index_it == signature_to_table_index_map.end()) {
             new_table_index = new_table(new_signature);
-        else
+        } else {
             new_table_index = new_table_index_it->second;
+        }
 
         // if current signature is empty or the entity has not existed in a table: just create new row in table
         if (!cur_signature.any()) {
@@ -432,16 +446,17 @@ struct WorldImpl {
             }
 
             entities_data.set(entity, {new_signature, 0});
+            return true;
         }
 
         // get new table, create new table if needed
         auto new_table_index_it = signature_to_table_index_map.find(new_signature);
         size_t new_table_index;
-        if (new_table_index_it == signature_to_table_index_map.end())
+        if (new_table_index_it == signature_to_table_index_map.end()) {
             new_table_index = new_table(new_signature);
-        else
+        } else {
             new_table_index = new_table_index_it->second;
-
+        }
         WorldDataTable &new_table = tables[new_table_index];
         new_table.new_row(entity);
 
@@ -476,7 +491,7 @@ struct WorldImpl {
         return true;
     }
 
-    auto remove_component(Entity entity, std::initializer_list<size_t> component_index_list) {
+    auto remove_component(Entity entity, std::initializer_list<size_t> component_index_list) -> void {
         auto entity_data_opt = entities_data.get(entity);
         if (!entity_data_opt.has_value()) return; // if entity not existed
 
@@ -506,15 +521,17 @@ struct WorldImpl {
             }
 
             entities_data.set(entity, {new_signature, 0});
+            return;
         }
 
         // get new table, create new table if needed
         auto new_table_index_it = signature_to_table_index_map.find(new_signature);
         size_t new_table_index;
-        if (new_table_index_it == signature_to_table_index_map.end())
+        if (new_table_index_it == signature_to_table_index_map.end()) {
             new_table_index = new_table(new_signature);
-        else
+        } else {
             new_table_index = new_table_index_it->second;
+        }
 
         WorldDataTable &new_table = tables[new_table_index];
         new_table.new_row(entity);
@@ -561,62 +578,70 @@ private:
 
 export template <typename... Ts> struct World {
     WorldImpl world_impl;
-    [[no_unique_address]] WorldComponentsRegister<Ts...> world_components_register;
+    using ComponentsRegisterType = WorldComponentsRegister<Ts...>;
 
-    [[nodiscard]] static auto make() -> World {
-        return World{.world_impl = WorldImpl::make<Ts...>(), .world_components_register{}};
-    }
+    [[nodiscard]] static auto make() -> World { return World{.world_impl = WorldImpl::make<Ts...>()}; }
     auto destroy() { world_impl.destroy(); }
 
     [[nodiscard]] auto new_entity() -> Entity { return world_impl.new_entity(); }
 
     [[nodiscard]] auto has_entity(Entity entity) -> bool { return world_impl.has_entity(entity); }
 
+    [[nodiscard]] auto get_entity_signature(Entity entity) -> std::optional<Signature> {
+        return world_impl.get_entity_signature(entity);
+    }
+
     template <typename T>
-        requires(world_components_register.template has<T>())
+        requires(ComponentsRegisterType::template has<T>())
+    [[nodiscard]] auto is_entity_has_component(Entity entity) -> bool {
+        return world_impl.is_entity_has_component(entity, ComponentsRegisterType::template get_index<T>());
+    }
+
+    template <typename T>
+        requires(ComponentsRegisterType::template has<T>())
     [[nodiscard]] auto get_component(Entity entity) const -> std::optional<T> {
-        const void *ptr = world_impl.get_component_ptr(entity, world_components_register.template get_index<T>());
+        const void *ptr = world_impl.get_component_ptr(entity, ComponentsRegisterType::template get_index<T>());
         if (ptr == nullptr) return {};
         return *(T *)ptr;
     }
 
     template <typename T>
-        requires(world_components_register.template has<T>())
+        requires(ComponentsRegisterType::template has<T>())
     [[nodiscard]] auto get_component_ptr(Entity entity) -> T * {
-        return (T *)world_impl.get_component_ptr(entity, world_components_register.template get_index<T>());
+        return (T *)world_impl.get_component_ptr(entity, ComponentsRegisterType::template get_index<T>());
     }
     template <typename T>
-        requires(world_components_register.template has<T>())
+        requires(ComponentsRegisterType::template has<T>())
     [[nodiscard]] auto get_component_ptr(Entity entity) const -> const T * {
-        return (const T *)world_impl.get_component_ptr(entity, world_components_register.template get_index<T>());
+        return (const T *)world_impl.get_component_ptr(entity, ComponentsRegisterType::template get_index<T>());
     }
 
     template <typename T>
-        requires(world_components_register.template has<T>())
+        requires(ComponentsRegisterType::template has<T>())
     [[nodiscard]] auto has_component(Entity entity) const -> bool {
-        return world_impl.has_component(entity, world_components_register.template get_index<T>());
+        return world_impl.has_component(entity, ComponentsRegisterType::template get_index<T>());
     }
 
     template <typename T>
-        requires(world_components_register.template has<T>())
+        requires(ComponentsRegisterType::template has<T>())
     auto add_component(Entity entity) -> T * {
-        return (T *)world_impl.add_component(entity, world_components_register.template get_index<T>());
+        return (T *)world_impl.add_component(entity, ComponentsRegisterType::template get_index<T>());
     }
     template <typename... Us>
-        requires(world_components_register.template has<Us>() && ...)
+        requires(sizeof...(Us) > 1 && (ComponentsRegisterType::template has<Us>() && ...))
     auto add_component(Entity entity) -> void {
-        world_impl.add_component(entity, {world_components_register.template get_index<Us>()...});
+        world_impl.add_component(entity, {ComponentsRegisterType::template get_index<Us>()...});
     }
 
     template <typename T>
-        requires(world_components_register.template has<T>())
+        requires(ComponentsRegisterType::template has<T>())
     auto remove_component(Entity entity) -> bool {
-        return world_impl.remove_component(entity, world_components_register.template get_index<T>());
+        return world_impl.remove_component(entity, ComponentsRegisterType::template get_index<T>());
     }
     template <typename... Us>
-        requires(world_components_register.template has<Us>() && ...)
+        requires(sizeof...(Us) > 1 && (ComponentsRegisterType::template has<Us>() && ...))
     auto remove_component(Entity entity) -> void {
-        world_impl.remove_component(entity, {world_components_register.template get_index<Us>()...});
+        world_impl.remove_component(entity, {ComponentsRegisterType::template get_index<Us>()...});
     }
 };
 
