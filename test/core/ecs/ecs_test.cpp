@@ -335,3 +335,77 @@ TEST_CASE("EcsWorld_StressTest") {
 
     world.destroy();
 }
+
+TEST_CASE("EcsWorld_Query") {
+    auto world = World<Position, Velocity, Health>::make();
+
+    Entity entities[10];
+    for (int i = 0; i < 10; i++) { entities[i] = world.new_entity(); }
+
+    // Setup: entities[0-3] have Position, entities[4-6] have Position+Velocity, entities[7-9] have all three
+    for (int i = 0; i < 10; i++) {
+        Position *pos = world.add_component<Position>(entities[i]);
+        pos->x = static_cast<float>(i);
+        pos->y = static_cast<float>(i * 2);
+
+        if (i >= 4) {
+            Velocity *vel = world.add_component<Velocity>(entities[i]);
+            vel->dx = 0.5f + i * 0.1f;
+            vel->dy = 1.0f + i * 0.2f;
+        }
+        if (i >= 7) {
+            Health *health = world.add_component<Health>(entities[i]);
+            health->value = 100 - i * 5;
+        }
+    }
+
+    SUBCASE("Query with Position only") {
+        auto query = world.query_builder().with<Position>().build();
+        int count = 0;
+        float x_sum = 0.0f;
+        for (auto [entity, prefab] : query) {
+            auto pos = prefab.get<Position>();
+            REQUIRE(pos.has_value());
+            x_sum += pos->x;
+            count++;
+        }
+        CHECK(count == 10);
+        CHECK(x_sum == doctest::Approx(45.0f)); // 0+1+...+9
+    }
+
+    SUBCASE("Query with Position and Velocity") {
+        auto query = world.query_builder().with<Position, Velocity>().build();
+        int count = 0;
+        for (auto [entity, prefab] : query) {
+            CHECK(prefab.get_ptr<Position>() != nullptr);
+            CHECK(prefab.get_ptr<Velocity>() != nullptr);
+            count++;
+        }
+        CHECK(count == 6); // entities[4-9]
+    }
+
+    SUBCASE("Query with all components") {
+        auto query = world.query_builder().with<Position, Velocity, Health>().build();
+        int count = 0;
+        for (auto [entity, prefab] : query) {
+            auto pos = prefab.get<Position>();
+            auto vel = prefab.get<Velocity>();
+            auto hp = prefab.get<Health>();
+            REQUIRE(pos.has_value());
+            REQUIRE(vel.has_value());
+            REQUIRE(hp.has_value());
+            CHECK(pos->x + vel->dx + hp->value > 0);
+            count++;
+        }
+        CHECK(count == 3); // entities[7-9]
+    }
+
+    SUBCASE("Query non-existent combination") {
+        auto query = world.query_builder().with<Health>().build();
+        int count = 0;
+        for (auto [entity, prefab] : query) { count++; }
+        CHECK(count == 3); // entities[7-9]
+    }
+
+    world.destroy();
+}
