@@ -58,17 +58,19 @@ struct ComponentData {
     size_t size, align;
 };
 
-struct WorldDataTable {
+struct WorldTable {
     char *table_raw;
     Entity *owner_list_raw;
     size_t row_size;
     size_t len;
     size_t cap;
 
+    Signature signature;
+
     FixedArr<size_t> component_offset_list;
 
     [[nodiscard]] static auto make(Signature signature, size_t component_count,
-                                   const FixedArr<ComponentData> &component_data_list) -> WorldDataTable {
+                                   const FixedArr<ComponentData> &component_data_list) -> WorldTable {
         auto component_offset_list = FixedArr<size_t>::make(component_count);
         size_t offset = 0;
         size_t max_align = 1;
@@ -87,12 +89,13 @@ struct WorldDataTable {
             max_align = std::max(max_align, component_data->align);
         }
 
-        return WorldDataTable{.table_raw = nullptr,
-                              .owner_list_raw = nullptr,
-                              .row_size = align_up(offset, max_align),
-                              .len = 0,
-                              .cap = 0,
-                              .component_offset_list = component_offset_list};
+        return WorldTable{.table_raw = nullptr,
+                          .owner_list_raw = nullptr,
+                          .row_size = align_up(offset, max_align),
+                          .len = 0,
+                          .cap = 0,
+                          .signature = signature,
+                          .component_offset_list = component_offset_list};
     }
 
     auto destroy() {
@@ -195,7 +198,7 @@ struct WorldImpl {
     FixedArr<ComponentData> component_data_list;
 
     std::unordered_map<Signature, size_t, SignatureHasher> signature_to_table_index_map;
-    std::vector<WorldDataTable> tables;
+    std::vector<WorldTable> tables;
 
     // ============================================================================================
     template <typename... Ts> [[nodiscard]] static auto make() -> WorldImpl {
@@ -310,17 +313,17 @@ struct WorldImpl {
 
         // if current signature is empty or the entity has not existed in a table: just create new row in table
         if (!cur_signature.any()) {
-            WorldDataTable &new_table = tables[new_table_index];
+            WorldTable &new_table = tables[new_table_index];
             new_table.new_row(entity);
             entities_data.set(entity, {new_signature, new_table.len - 1});
         }
         // else: move old data to new row, delete old row
         else {
-            WorldDataTable &new_table = tables[new_table_index];
+            WorldTable &new_table = tables[new_table_index];
             new_table.new_row(entity);
 
             size_t cur_table_index = signature_to_table_index_map.at(cur_signature);
-            WorldDataTable &cur_table = tables[cur_table_index];
+            WorldTable &cur_table = tables[cur_table_index];
 
             size_t cur_row_index = entity_data_opt.value().table_row_index;
 
@@ -348,7 +351,7 @@ struct WorldImpl {
             entities_data.set(entity, {new_signature, new_table.len - 1});
         }
 
-        WorldDataTable &new_table = tables[new_table_index];
+        WorldTable &new_table = tables[new_table_index];
         return new_table.get_component_ptr(new_table.len - 1, component_index);
     }
 
@@ -377,17 +380,17 @@ struct WorldImpl {
 
         // if current signature is empty or the entity has not existed in a table: just create new row in table
         if (!cur_signature.any()) {
-            WorldDataTable &new_table = tables[new_table_index];
+            WorldTable &new_table = tables[new_table_index];
             new_table.new_row(entity);
             entities_data.set(entity, {new_signature, new_table.len - 1});
         }
         // else: move old data to new row, delete old row
         else {
-            WorldDataTable &new_table = tables[new_table_index];
+            WorldTable &new_table = tables[new_table_index];
             new_table.new_row(entity);
 
             size_t cur_table_index = signature_to_table_index_map.at(cur_signature);
-            WorldDataTable &cur_table = tables[cur_table_index];
+            WorldTable &cur_table = tables[cur_table_index];
 
             size_t cur_row_index = entity_data_opt.value().table_row_index;
 
@@ -432,7 +435,7 @@ struct WorldImpl {
 
         if (!new_signature.any()) {
             size_t cur_table_index = signature_to_table_index_map.at(cur_signature);
-            WorldDataTable &cur_table = tables[cur_table_index];
+            WorldTable &cur_table = tables[cur_table_index];
 
             size_t cur_row_index = entity_data_opt.value().table_row_index;
 
@@ -457,11 +460,11 @@ struct WorldImpl {
         } else {
             new_table_index = new_table_index_it->second;
         }
-        WorldDataTable &new_table = tables[new_table_index];
+        WorldTable &new_table = tables[new_table_index];
         new_table.new_row(entity);
 
         size_t cur_table_index = signature_to_table_index_map.at(cur_signature);
-        WorldDataTable &cur_table = tables[cur_table_index];
+        WorldTable &cur_table = tables[cur_table_index];
 
         size_t cur_row_index = entity_data_opt.value().table_row_index;
 
@@ -507,7 +510,7 @@ struct WorldImpl {
 
         if (!new_signature.any()) {
             size_t cur_table_index = signature_to_table_index_map.at(cur_signature);
-            WorldDataTable &cur_table = tables[cur_table_index];
+            WorldTable &cur_table = tables[cur_table_index];
 
             size_t cur_row_index = entity_data_opt.value().table_row_index;
 
@@ -533,11 +536,11 @@ struct WorldImpl {
             new_table_index = new_table_index_it->second;
         }
 
-        WorldDataTable &new_table = tables[new_table_index];
+        WorldTable &new_table = tables[new_table_index];
         new_table.new_row(entity);
 
         size_t cur_table_index = signature_to_table_index_map.at(cur_signature);
-        WorldDataTable &cur_table = tables[cur_table_index];
+        WorldTable &cur_table = tables[cur_table_index];
 
         size_t cur_row_index = entity_data_opt.value().table_row_index;
 
@@ -569,11 +572,138 @@ private:
     auto new_table(Signature signature) -> size_t {
         assert(!signature_to_table_index_map.contains(signature) && "signature should not already existed");
 
-        tables.push_back(WorldDataTable::make(signature, component_count, component_data_list));
+        tables.push_back(WorldTable::make(signature, component_count, component_data_list));
         signature_to_table_index_map.insert({signature, tables.size() - 1});
 
         return tables.size() - 1;
     }
+};
+
+export template <typename... Ts> struct World;
+
+export template <typename... Ts> struct WorldQuery {
+    using WorldType = World<Ts...>;
+
+    WorldType *world_ref;
+    Signature signature;
+
+    [[nodiscard]] static auto make(WorldType *world_ref, Signature signature) -> WorldQuery {
+        return WorldQuery{.world_ref = world_ref, .signature = signature};
+    }
+
+    struct iterator {
+        struct PrefabQuery {
+            WorldTable *table_ref;
+            size_t cur_row_index;
+
+            template <typename T>
+                requires(WorldType::ComponentsRegisterType::template has<T>())
+            [[nodiscard]] auto get() const -> std::optional<T> {
+                size_t component_index = WorldType::ComponentsRegisterType::template get_index<T>();
+
+                if (!table_ref->signature.test(component_index)) { return {}; }
+
+                const void *ptr = table_ref->get_component_ptr(cur_row_index, component_index);
+                return *static_cast<const T *>(ptr);
+            }
+
+            template <typename T>
+                requires(WorldType::ComponentsRegisterType::template has<T>())
+            [[nodiscard]] auto get_ptr() const -> T * {
+                size_t component_index = WorldType::ComponentsRegisterType::template get_index<T>();
+
+                if (!table_ref->signature.test(component_index)) { return nullptr; }
+
+                void *ptr = table_ref->get_component_ptr(cur_row_index, component_index);
+                return static_cast<T *>(ptr);
+            }
+            template <typename T>
+                requires(WorldType::ComponentsRegisterType::template has<T>())
+            [[nodiscard]] auto get_const_ptr() const -> const T * {
+                size_t component_index = WorldType::ComponentsRegisterType::template get_index<T>();
+
+                if (!table_ref->signature.test(component_index)) { return nullptr; }
+
+                const void *ptr = table_ref->get_component_ptr(cur_row_index, component_index);
+                return static_cast<const T *>(ptr);
+            }
+        };
+
+        using iterator_concept = std::forward_iterator_tag;
+        using value_type = std::pair<Entity, PrefabQuery>;
+        using difference_type = std::ptrdiff_t;
+
+        const WorldQuery *source = nullptr;
+        size_t cur_table_index = 0;
+        size_t cur_row_index = 0;
+
+        iterator() = default;
+
+        iterator(const WorldQuery *source, size_t table_index, size_t row_index)
+            : source(source), cur_table_index(table_index), cur_row_index(row_index) {
+            if (source) skip_invalid();
+        }
+
+        [[nodiscard]] auto operator*() const -> value_type {
+            auto &table = source->world_ref->world_impl.tables[cur_table_index];
+            return {table.owner_list_raw[cur_row_index], {.table_ref = &table, .cur_row_index = cur_row_index}};
+        }
+
+        auto operator++() -> iterator & {
+            ++cur_row_index;
+            skip_invalid();
+            return *this;
+        }
+
+        auto operator++(int) -> iterator {
+            iterator tmp = *this;
+            ++(*this);
+            return tmp;
+        }
+
+        [[nodiscard]] auto operator==(const iterator &other) const -> bool = default;
+
+    private:
+        auto skip_invalid() -> void {
+            const auto &tables = source->world_ref->world_impl.tables;
+            while (cur_table_index < tables.size()) {
+                const auto &table = tables[cur_table_index];
+
+                if ((table.signature & source->signature) == source->signature) {
+                    if (cur_row_index < table.len) { return; }
+                }
+
+                ++cur_table_index;
+                cur_row_index = 0;
+            }
+        }
+    };
+
+    static_assert(std::forward_iterator<iterator>, "WorldQuery::iterator must satisfy std::forward_iterator");
+
+    [[nodiscard]] auto begin() const -> iterator { return iterator{this, 0, 0}; }
+
+    [[nodiscard]] auto end() const -> iterator { return iterator{this, world_ref->world_impl.tables.size(), 0}; }
+};
+
+export template <typename... Ts> struct WorldQueryBuilder {
+    using WorldType = World<Ts...>;
+
+    WorldType *world_ref;
+    Signature signature;
+
+    [[nodiscard]] static auto make(WorldType *world_ref) -> WorldQueryBuilder {
+        return WorldQueryBuilder{.world_ref = world_ref, .signature = Signature{}};
+    }
+
+    template <typename... Us>
+        requires((WorldType::ComponentsRegisterType::template has<Us>() && ...))
+    auto with() -> WorldQueryBuilder & {
+        (..., signature.set(WorldType::ComponentsRegisterType::template get_index<Us>()));
+        return *this;
+    }
+
+    [[nodiscard]] auto build() const -> WorldQuery<Ts...> { return WorldQuery<Ts...>::make(world_ref, signature); }
 };
 
 export template <typename... Ts> struct World {
@@ -672,6 +802,8 @@ export template <typename... Ts> struct World {
     auto remove_component(Entity entity, std::initializer_list<size_t> component_index_list) -> void {
         world_impl.remove_component(entity, component_index_list);
     }
+
+    [[nodiscard]] auto query_builder() -> WorldQueryBuilder<Ts...> { return WorldQueryBuilder<Ts...>::make(this); }
 };
 
 } // namespace cactus
