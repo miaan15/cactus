@@ -16,13 +16,30 @@ export template <typename T, typename Alloc = std::allocator<T>> struct FixedArr
 
     [[no_unique_address]] Alloc allocator;
 
-    [[nodiscard]] static auto make(size_t len) -> FixedArr {
-        auto alloc = Alloc();
-        T *data_raw = AllocTraits::allocate(alloc, len);
-        return FixedArr{.data_raw = data_raw, .len = len, .allocator = alloc};
+    explicit FixedArr(size_t len) : len(len) {
+        allocator = Alloc();
+        data_raw = AllocTraits::allocate(allocator, len);
     }
 
-    auto destroy() { AllocTraits::deallocate(allocator, data_raw, len); }
+    ~FixedArr() {
+        if (data_raw != nullptr) AllocTraits::deallocate(allocator, data_raw, len);
+    }
+
+    FixedArr(const FixedArr &other) = delete;
+    FixedArr &operator=(const FixedArr &other) = delete;
+
+    FixedArr(FixedArr &&other) noexcept : data_raw(other.data_raw), len(other.len), allocator(std::move(other.allocator)) {
+        other.data_raw = nullptr;
+        other.len = 0;
+    }
+    FixedArr &operator=(FixedArr &&other) noexcept {
+        if (this != &other) {
+            std::swap(data_raw, other.data_raw);
+            std::swap(len, other.len);
+            std::swap(allocator, other.allocator);
+        }
+        return *this;
+    }
 
     auto set(size_t index, const T &val) -> bool {
         if (index >= len) return false;

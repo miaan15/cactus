@@ -20,7 +20,7 @@ struct Health {
 };
 
 TEST_CASE("EcsWorld_EntityAndSignature") {
-    auto world = World<Position, Velocity, Health>::make();
+    auto world = World<Position, Velocity, Health>();
 
     Entity e1 = world.new_entity();
     Entity e2 = world.new_entity();
@@ -43,12 +43,10 @@ TEST_CASE("EcsWorld_EntityAndSignature") {
 
     world.add_component<Velocity>(e1);
     CHECK(world.get_entity_signature(e1)->count() == 2);
-
-    world.destroy();
 }
 
 TEST_CASE("EcsWorld_AddRemoveGetComponent") {
-    auto world = World<Position, Velocity, Health>::make();
+    auto world = World<Position, Velocity, Health>();
 
     Entity e = world.new_entity();
 
@@ -111,12 +109,10 @@ TEST_CASE("EcsWorld_AddRemoveGetComponent") {
         Position *pos_ptr = world.get_component_ptr<Position>(e);
         CHECK(pos_ptr == nullptr);
     }
-
-    world.destroy();
 }
 
 TEST_CASE("EcsWorld_StressTest") {
-    auto world = World<Position, Velocity, Health>::make();
+    auto world = World<Position, Velocity, Health>();
 
     Entity entities[32];
     for (int i = 0; i < 32; i++) { entities[i] = world.new_entity(); }
@@ -332,12 +328,10 @@ TEST_CASE("EcsWorld_StressTest") {
         }
         CHECK(aggregate_table_len == active_entities);
     }
-
-    world.destroy();
 }
 
 TEST_CASE("EcsWorld_Query") {
-    auto world = World<Position, Velocity, Health>::make();
+    auto world = World<Position, Velocity, Health>();
 
     Entity entities[10];
     for (int i = 0; i < 10; i++) { entities[i] = world.new_entity(); }
@@ -406,6 +400,4 @@ TEST_CASE("EcsWorld_Query") {
         for (auto [entity, prefab] : query) { count++; }
         CHECK(count == 3); // entities[7-9]
     }
-
-    world.destroy();
 }

@@ -69,39 +69,58 @@ struct WorldTable {
 
     FixedArr<size_t> component_offset_list;
 
-    [[nodiscard]] static auto make(Signature signature, size_t component_count,
-                                   const FixedArr<ComponentData> &component_data_list) -> WorldTable {
-        auto component_offset_list = FixedArr<size_t>::make(component_count);
+    explicit WorldTable(Signature signature, size_t component_count, const FixedArr<ComponentData> &component_data_list)
+        : table_raw(nullptr), owner_list_raw(nullptr), len(0), cap(0), signature(signature),
+          component_offset_list(component_count) {
         size_t offset = 0;
         size_t max_align = 1;
 
         auto signature_ull = signature.to_ullong();
         for (auto signature_ull = signature.to_ullong(); signature_ull > 0; signature_ull &= (signature_ull - 1)) {
             int component_index = __builtin_ctzll(signature_ull);
-            auto component_data = component_data_list.get(component_index);
+            auto component_data_opt = component_data_list.get(component_index);
+            assert(component_data_opt.has_value());
 
-            offset = align_up(offset, component_data->align);
+            offset = align_up(offset, component_data_opt->align);
 
             component_offset_list.set(component_index, offset);
 
-            offset += component_data->size;
+            offset += component_data_opt->size;
 
-            max_align = std::max(max_align, component_data->align);
+            max_align = std::max(max_align, component_data_opt->align);
         }
-
-        return WorldTable{.table_raw = nullptr,
-                          .owner_list_raw = nullptr,
-                          .row_size = align_up(offset, max_align),
-                          .len = 0,
-                          .cap = 0,
-                          .signature = signature,
-                          .component_offset_list = component_offset_list};
+        row_size = align_up(offset, max_align);
     }
 
-    auto destroy() {
-        std::free(table_raw);
-        std::free(owner_list_raw);
-        component_offset_list.destroy();
+    ~WorldTable() {
+        if (table_raw != nullptr) std::free(table_raw);
+        if (owner_list_raw != nullptr) std::free(owner_list_raw);
+    }
+
+    WorldTable(const WorldTable &other) = delete;
+    WorldTable &operator=(const WorldTable &other) = delete;
+
+    WorldTable(WorldTable &&other) noexcept
+        : table_raw(other.table_raw), owner_list_raw(other.owner_list_raw), row_size(other.row_size), len(other.len),
+          cap(other.cap), signature(std::move(other.signature)), component_offset_list(std::move(other.component_offset_list)) {
+        other.table_raw = nullptr;
+        other.owner_list_raw = nullptr;
+        other.row_size = 0;
+        other.len = 0;
+        other.cap = 0;
+    }
+
+    WorldTable &operator=(WorldTable &&other) noexcept {
+        if (this != &other) {
+            std::swap(table_raw, other.table_raw);
+            std::swap(owner_list_raw, other.owner_list_raw);
+            std::swap(row_size, other.row_size);
+            std::swap(len, other.len);
+            std::swap(cap, other.cap);
+            std::swap(signature, other.signature);
+            std::swap(component_offset_list, other.component_offset_list);
+        }
+        return *this;
     }
 
     [[nodiscard]] auto get_row_ptr(size_t row_index) const -> const void * {
@@ -200,32 +219,29 @@ struct WorldImpl {
     std::unordered_map<Signature, size_t, SignatureHasher> signature_to_table_index_map;
     std::vector<WorldTable> tables;
 
-    // ============================================================================================
+    WorldImpl() = delete;
+    ~WorldImpl() = default;
+
+    WorldImpl(const WorldImpl &other) = delete;
+    WorldImpl &operator=(const WorldImpl &other) = delete;
+
+    WorldImpl(WorldImpl &&other) noexcept = default;
+    WorldImpl &operator=(WorldImpl &&other) noexcept = default;
+
     template <typename... Ts> [[nodiscard]] static auto make() -> WorldImpl {
         WorldComponentsRegister<Ts...> component_register;
 
         size_t component_count = component_register.size();
-        auto component_data_list = FixedArr<ComponentData>::make(component_count);
+        auto component_data_list = FixedArr<ComponentData>(component_count);
 
         [&]<std::size_t... Is>(std::index_sequence<Is...>) {
             (..., component_data_list.set(
                       Is, {component_register.template get_size<Is>(), component_register.template get_align<Is>()}));
         }(std::make_index_sequence<sizeof...(Ts)>{});
 
-        return WorldImpl{.entities_data = SlotMap<EntityData>::make(),
-                         .component_count = component_count,
-                         .component_data_list = component_data_list,
-                         .signature_to_table_index_map{},
-                         .tables{}};
+        return WorldImpl(component_count, std::move(component_data_list));
     }
 
-    auto destroy() {
-        entities_data.destroy();
-        component_data_list.destroy();
-        for (auto &&table : tables) { table.destroy(); }
-    }
-
-    // ============================================================================================
     [[nodiscard]] auto new_entity() -> Entity { return entities_data.push(EntityData{Signature{}, 0}); }
 
     [[nodiscard]] auto has_entity(Entity entity) -> bool { return entities_data.has(entity); }
@@ -569,10 +585,14 @@ struct WorldImpl {
     }
 
 private:
+    explicit WorldImpl(size_t component_count, FixedArr<ComponentData> &&component_data_list)
+        : entities_data(), component_count(component_count), component_data_list(std::move(component_data_list)),
+          signature_to_table_index_map(), tables() {}
+
     auto new_table(Signature signature) -> size_t {
         assert(!signature_to_table_index_map.contains(signature) && "signature should not already existed");
 
-        tables.push_back(WorldTable::make(signature, component_count, component_data_list));
+        tables.push_back(WorldTable(signature, component_count, component_data_list));
         signature_to_table_index_map.insert({signature, tables.size() - 1});
 
         return tables.size() - 1;
@@ -582,14 +602,19 @@ private:
 export template <typename... Ts> struct World;
 
 export template <typename... Ts> struct WorldQuery {
-    using WorldType = World<Ts...>;
+    using world_t = World<Ts...>;
 
-    WorldType *world_ref;
+    world_t *world_ref;
     Signature signature;
 
-    [[nodiscard]] static auto make(WorldType *world_ref, Signature signature) -> WorldQuery {
-        return WorldQuery{.world_ref = world_ref, .signature = signature};
-    }
+    explicit WorldQuery(world_t *world_ref, Signature signature) : world_ref(world_ref), signature(signature) {}
+    ~WorldQuery() = default;
+
+    WorldQuery(const WorldQuery &other) = default;
+    WorldQuery &operator=(const WorldQuery &other) = default;
+
+    WorldQuery(WorldQuery &&other) noexcept = default;
+    WorldQuery &operator=(WorldQuery &&other) noexcept = default;
 
     struct iterator {
         struct PrefabQuery {
@@ -597,9 +622,9 @@ export template <typename... Ts> struct WorldQuery {
             size_t cur_row_index;
 
             template <typename T>
-                requires(WorldType::ComponentsRegisterType::template has<T>())
+                requires(world_t::component_register_t::template has<T>())
             [[nodiscard]] auto get() const -> std::optional<T> {
-                size_t component_index = WorldType::ComponentsRegisterType::template get_index<T>();
+                size_t component_index = world_t::component_register_t::template get_index<T>();
 
                 if (!table_ref->signature.test(component_index)) { return {}; }
 
@@ -608,9 +633,9 @@ export template <typename... Ts> struct WorldQuery {
             }
 
             template <typename T>
-                requires(WorldType::ComponentsRegisterType::template has<T>())
+                requires(world_t::component_register_t::template has<T>())
             [[nodiscard]] auto get_ptr() const -> T * {
-                size_t component_index = WorldType::ComponentsRegisterType::template get_index<T>();
+                size_t component_index = world_t::component_register_t::template get_index<T>();
 
                 if (!table_ref->signature.test(component_index)) { return nullptr; }
 
@@ -618,9 +643,9 @@ export template <typename... Ts> struct WorldQuery {
                 return static_cast<T *>(ptr);
             }
             template <typename T>
-                requires(WorldType::ComponentsRegisterType::template has<T>())
+                requires(world_t::component_register_t::template has<T>())
             [[nodiscard]] auto get_const_ptr() const -> const T * {
-                size_t component_index = WorldType::ComponentsRegisterType::template get_index<T>();
+                size_t component_index = world_t::component_register_t::template get_index<T>();
 
                 if (!table_ref->signature.test(component_index)) { return nullptr; }
 
@@ -687,31 +712,42 @@ export template <typename... Ts> struct WorldQuery {
 };
 
 export template <typename... Ts> struct WorldQueryBuilder {
-    using WorldType = World<Ts...>;
+    using world_t = World<Ts...>;
 
-    WorldType *world_ref;
+    world_t *world_ref;
     Signature signature;
 
-    [[nodiscard]] static auto make(WorldType *world_ref) -> WorldQueryBuilder {
-        return WorldQueryBuilder{.world_ref = world_ref, .signature = Signature{}};
-    }
+    explicit WorldQueryBuilder(world_t *world_ref) : world_ref(world_ref), signature(Signature{}) {}
+    ~WorldQueryBuilder() = default;
+
+    WorldQueryBuilder(const WorldQueryBuilder &other) = default;
+    WorldQueryBuilder &operator=(const WorldQueryBuilder &other) = default;
+
+    WorldQueryBuilder(WorldQueryBuilder &&other) noexcept = default;
+    WorldQueryBuilder &operator=(WorldQueryBuilder &&other) noexcept = default;
 
     template <typename... Us>
-        requires((WorldType::ComponentsRegisterType::template has<Us>() && ...))
+        requires((world_t::component_register_t::template has<Us>() && ...))
     auto with() -> WorldQueryBuilder & {
-        (..., signature.set(WorldType::ComponentsRegisterType::template get_index<Us>()));
+        (..., signature.set(world_t::component_register_t::template get_index<Us>()));
         return *this;
     }
 
-    [[nodiscard]] auto build() const -> WorldQuery<Ts...> { return WorldQuery<Ts...>::make(world_ref, signature); }
+    [[nodiscard]] auto build() const -> WorldQuery<Ts...> { return WorldQuery<Ts...>(world_ref, signature); }
 };
 
 export template <typename... Ts> struct World {
     WorldImpl world_impl;
-    using ComponentsRegisterType = WorldComponentsRegister<Ts...>;
+    using component_register_t = WorldComponentsRegister<Ts...>;
 
-    [[nodiscard]] static auto make() -> World { return World{.world_impl = WorldImpl::make<Ts...>()}; }
-    auto destroy() { world_impl.destroy(); }
+    explicit World() : world_impl(WorldImpl::make<Ts...>()) {}
+    ~World() = default;
+
+    World(const World &other) = delete;
+    World &operator=(const World &other) = delete;
+
+    World(World &&other) noexcept = default;
+    World &operator=(World &&other) noexcept = default;
 
     [[nodiscard]] auto new_entity() -> Entity { return world_impl.new_entity(); }
 
@@ -722,56 +758,56 @@ export template <typename... Ts> struct World {
     }
 
     template <typename T>
-        requires(ComponentsRegisterType::template has<T>())
+        requires(component_register_t::template has<T>())
     [[nodiscard]] auto is_entity_has_component(Entity entity) -> bool {
-        return world_impl.is_entity_has_component(entity, ComponentsRegisterType::template get_index<T>());
+        return world_impl.is_entity_has_component(entity, component_register_t::template get_index<T>());
     }
 
     template <typename T>
-        requires(ComponentsRegisterType::template has<T>())
+        requires(component_register_t::template has<T>())
     [[nodiscard]] auto get_component(Entity entity) const -> std::optional<T> {
-        const void *ptr = world_impl.get_component_ptr(entity, ComponentsRegisterType::template get_index<T>());
+        const void *ptr = world_impl.get_component_ptr(entity, component_register_t::template get_index<T>());
         if (ptr == nullptr) return {};
         return *(T *)ptr;
     }
 
     template <typename T>
-        requires(ComponentsRegisterType::template has<T>())
+        requires(component_register_t::template has<T>())
     [[nodiscard]] auto get_component_ptr(Entity entity) -> T * {
-        return (T *)world_impl.get_component_ptr(entity, ComponentsRegisterType::template get_index<T>());
+        return (T *)world_impl.get_component_ptr(entity, component_register_t::template get_index<T>());
     }
     template <typename T>
-        requires(ComponentsRegisterType::template has<T>())
+        requires(component_register_t::template has<T>())
     [[nodiscard]] auto get_component_ptr(Entity entity) const -> const T * {
-        return (const T *)world_impl.get_component_ptr(entity, ComponentsRegisterType::template get_index<T>());
+        return (const T *)world_impl.get_component_ptr(entity, component_register_t::template get_index<T>());
     }
 
     template <typename T>
-        requires(ComponentsRegisterType::template has<T>())
+        requires(component_register_t::template has<T>())
     [[nodiscard]] auto has_component(Entity entity) const -> bool {
-        return world_impl.has_component(entity, ComponentsRegisterType::template get_index<T>());
+        return world_impl.has_component(entity, component_register_t::template get_index<T>());
     }
 
     template <typename T>
-        requires(ComponentsRegisterType::template has<T>())
+        requires(component_register_t::template has<T>())
     auto add_component(Entity entity) -> T * {
-        return (T *)world_impl.add_component(entity, ComponentsRegisterType::template get_index<T>());
+        return (T *)world_impl.add_component(entity, component_register_t::template get_index<T>());
     }
     template <typename... Us>
-        requires(sizeof...(Us) > 1 && (ComponentsRegisterType::template has<Us>() && ...))
+        requires(sizeof...(Us) > 1 && (component_register_t::template has<Us>() && ...))
     auto add_component(Entity entity) -> void {
-        world_impl.add_component(entity, {ComponentsRegisterType::template get_index<Us>()...});
+        world_impl.add_component(entity, {component_register_t::template get_index<Us>()...});
     }
 
     template <typename T>
-        requires(ComponentsRegisterType::template has<T>())
+        requires(component_register_t::template has<T>())
     auto remove_component(Entity entity) -> bool {
-        return world_impl.remove_component(entity, ComponentsRegisterType::template get_index<T>());
+        return world_impl.remove_component(entity, component_register_t::template get_index<T>());
     }
     template <typename... Us>
-        requires(sizeof...(Us) > 1 && (ComponentsRegisterType::template has<Us>() && ...))
+        requires(sizeof...(Us) > 1 && (component_register_t::template has<Us>() && ...))
     auto remove_component(Entity entity) -> void {
-        world_impl.remove_component(entity, {ComponentsRegisterType::template get_index<Us>()...});
+        world_impl.remove_component(entity, {component_register_t::template get_index<Us>()...});
     }
 
     [[nodiscard]] auto is_entity_has_component(Entity entity, size_t component_index) -> bool {
@@ -803,7 +839,7 @@ export template <typename... Ts> struct World {
         world_impl.remove_component(entity, component_index_list);
     }
 
-    [[nodiscard]] auto query_builder() -> WorldQueryBuilder<Ts...> { return WorldQueryBuilder<Ts...>::make(this); }
+    [[nodiscard]] auto query_builder() -> WorldQueryBuilder<Ts...> { return WorldQueryBuilder<Ts...>(this); }
 };
 
 } // namespace cactus
