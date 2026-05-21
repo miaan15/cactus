@@ -4,10 +4,8 @@ module;
 
 export module cactus.core.ecs;
 
-import std;
+import cactus.common;
 import cactus.core.strat;
-
-using size_t = std::size_t;
 
 namespace cactus {
 
