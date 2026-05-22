@@ -21,7 +21,30 @@ export struct ParserLocation {
 };
 
 export struct Parser {
+    using data_t = std::variant<int, float, unsigned int>;
+    struct IdentifierData {
+        size_t point_to;
+        size_t data_len;
+
+        size_t parent_len;
+    };
+
     std::vector<std::pair<ParserLocation, Token>> tokens;
+
+    std::vector<data_t> data;
+    std::vector<char> string_data;
+    std::vector<IdentifierData> identifier_data_list;
+    std::flat_map<std::string, size_t> identifier_to_id_map;
+
+    size_t next_identifier_id = 0;
+    size_t next_string_data_index = 0;
+
+    explicit Parser() = default;
+    ~Parser() = default;
+    Parser(const Parser &other) = delete;
+    Parser &operator=(const Parser &other) = delete;
+    Parser(Parser &&other) noexcept = default;
+    Parser &operator=(Parser &&other) noexcept = default;
 
     auto parse(const stdf::path &dir) {
         std::string content = get_and_preprocess_file(dir).value(); // TODO error
@@ -33,6 +56,108 @@ export struct Parser {
             std::println("index {} at {}:{} : token = {}; len = {} >> {}", p.first.index, p.first.line, p.first.column,
                          (size_t)p.second.type, p.second.len, std::string_view(content.data() + p.first.index, p.second.len));
         }
+
+        std::stack<size_t> identifier_stack{};
+        short just_after_identifier = 0; // cheat flag by set = 2 then decrease 2 times
+        auto pop_identifier_stack = [&]() {
+            if (identifier_stack.empty()) return;
+
+            const auto &old_identifier_data = identifier_data_list[identifier_stack.top()];
+            auto old_data_len = old_identifier_data.data_len;
+            auto old_parent_len = old_identifier_data.data_len;
+
+            identifier_stack.pop();
+
+            if (identifier_stack.empty()) return;
+
+            auto &identifier_data = identifier_data_list[identifier_stack.top()];
+            identifier_data.data_len += old_data_len;
+            identifier_data.parent_len += old_parent_len;
+        };
+        for (auto &[location, token] : tokens) {
+            switch ((int)token.type) {
+            case TokenType::IDENTIFIER: {
+                std::string str = content.substr(location.index, token.len);
+                identifier_to_id_map[std::move(str)] = next_identifier_id;
+                identifier_data_list.push_back({.point_to = data.size(), .data_len = 0, .parent_len = 1});
+
+                identifier_stack.push(next_identifier_id);
+
+                ++next_identifier_id;
+
+                just_after_identifier = 2;
+            } break;
+            case TokenType::NUMBER: {
+                std::string_view strv(content.data() + location.index, token.len);
+
+                int i_val;
+                auto res_i = std::from_chars(strv.data(), strv.data() + strv.size(), i_val);
+
+                if (res_i.ptr == strv.data() + strv.size()) {
+                    data.push_back(i_val);
+                } else {
+                    float f_val;
+                    auto res_f = std::from_chars(strv.data(), strv.data() + strv.size(), f_val);
+
+                    if (res_f.ptr == strv.data() + strv.size()) {
+                        data.push_back(f_val);
+                    } else {
+                        assert(false);
+                        return;
+                        // TODO error
+                    }
+                }
+
+                assert(!identifier_stack.empty());
+                ++identifier_data_list[identifier_stack.top()].data_len;
+                if (just_after_identifier) pop_identifier_stack();
+            } break;
+            case TokenType::STRING: {
+                std::string_view strv(content.data() + location.index, token.len);
+
+                data.push_back((unsigned int)next_string_data_index);
+
+                string_data.insert(string_data.end(), strv.begin(), strv.end());
+                string_data.push_back('\0');
+
+                next_string_data_index += strv.size() + 1;
+
+                assert(!identifier_stack.empty());
+                ++identifier_data_list[identifier_stack.top()].data_len;
+                if (just_after_identifier) pop_identifier_stack();
+            } break;
+            case '{': {
+            } break;
+            case '}': {
+                pop_identifier_stack();
+            } break;
+            default: {
+                assert(false);
+                return;
+                // TODO error
+            } break;
+            }
+
+            if (just_after_identifier) --just_after_identifier;
+        }
+
+        std::println();
+        std::print("data:\t");
+        for (auto v : data) {
+            std::visit([](auto &&arg) { std::print("{} ", arg); }, v);
+        }
+        std::println();
+
+        std::print("str:\t");
+        for (auto v : string_data) { std::print("{} ", v == '\0' ? '~' : v); }
+        std::println();
+
+        std::println("identifier:");
+        for (auto [name, id] : identifier_to_id_map) {
+            auto data = identifier_data_list[id];
+            std::println("{}: point_to: {}; data_len: {}; parent_len: {}", name, data.point_to, data.data_len, data.parent_len);
+        }
+        std::println();
     }
 
 private:
@@ -80,7 +205,8 @@ private:
                 if (content_view.empty()) break;
             }
 
-            if (state == ReadState::EXPECT_IDENTIFIER) {
+            switch (state) {
+            case ReadState::EXPECT_IDENTIFIER: {
                 if (might_be_value(content_view.front())) {
                     assert(false);
                     return false; // TODO error
@@ -92,8 +218,9 @@ private:
                 content_view.remove_prefix(len);
 
                 state = ReadState::AFTER_IDENTIFIER;
-                continue;
-            } else if (state == ReadState::AFTER_IDENTIFIER) {
+            } break;
+
+            case ReadState::AFTER_IDENTIFIER: {
                 if (content_view.front() != '=' && content_view.front() != '{') {
                     assert(false);
                     return false; // TODO error
@@ -106,13 +233,16 @@ private:
                 }
 
                 state = ReadState::EXPECT_VALUE;
-                continue;
-            } else if (state == ReadState::EXPECT_VALUE) {
-                if (content_view.front() == '{') {
+            } break;
+
+            case ReadState::EXPECT_VALUE: {
+                switch (content_view.front()) {
+                case '{': {
                     tokens.push_back({cur_location, Token{.type = (TokenType)content_view.front(), .len = 1}});
                     cur_location.advance_horizontal(1);
                     content_view.remove_prefix(1);
-                } else if (content_view.front() == '\"') {
+                } break;
+                case '\"': {
                     cur_location.advance_horizontal(1);
                     content_view.remove_prefix(1);
 
@@ -121,40 +251,51 @@ private:
                         tokens.push_back({cur_location, Token{.type = TokenType::STRING, .len = end_string_i}});
                     cur_location.advance_horizontal(end_string_i + 1);
                     content_view.remove_prefix(end_string_i + 1);
-                } else if (might_be_value(content_view.front())) {
-                    size_t num_len = content_view.find_first_of(" \t\n,");
-                    tokens.push_back({cur_location, Token{.type = TokenType::NUMBER, .len = num_len}});
-                    cur_location.advance_horizontal(num_len);
-                    content_view.remove_prefix(num_len);
-                } else {
-                    assert(false);
-                    return false; // TODO error
+                } break;
+                default: {
+                    if (might_be_value(content_view.front())) {
+                        size_t num_len = content_view.find_first_of(" \t\n,");
+                        tokens.push_back({cur_location, Token{.type = TokenType::NUMBER, .len = num_len}});
+                        cur_location.advance_horizontal(num_len);
+                        content_view.remove_prefix(num_len);
+                    } else {
+                        assert(false);
+                        return false; // TODO error
+                    }
+                } break;
                 }
 
                 state = ReadState::AFTER_VALUE;
-                continue;
-            } else if (state == ReadState::AFTER_VALUE) {
-                if (content_view.front() == ',') {
+            } break;
+
+            case ReadState::AFTER_VALUE: {
+                switch (content_view.front()) {
+                case ',':
                     cur_location.advance_horizontal(1);
                     content_view.remove_prefix(1);
-
                     state = ReadState::AFTER_SEPARATOR;
-                } else if (content_view.front() == '}') {
+                    break;
+                case '}':
                     tokens.push_back({cur_location, Token{.type = (TokenType)content_view.front(), .len = 1}});
                     cur_location.advance_horizontal(1);
                     content_view.remove_prefix(1);
-
                     state = ReadState::AFTER_ARRAY;
-                } else {
+                    break;
+                default:
                     state = ReadState::EXPECT_IDENTIFIER;
+                    break;
                 }
-            } else if (state == ReadState::AFTER_SEPARATOR) {
+            } break;
+
+            case ReadState::AFTER_SEPARATOR: {
                 if (might_be_value(content_view.front())) {
                     state = ReadState::EXPECT_VALUE;
                 } else {
                     state = ReadState::EXPECT_IDENTIFIER;
                 }
-            } else if (state == ReadState::AFTER_ARRAY) {
+            } break;
+
+            case ReadState::AFTER_ARRAY: {
                 if (content_view.front() == ',') {
                     cur_location.advance_horizontal(1);
                     content_view.remove_prefix(1);
@@ -163,6 +304,7 @@ private:
                 } else {
                     state = ReadState::EXPECT_IDENTIFIER;
                 }
+            } break;
             }
         }
 

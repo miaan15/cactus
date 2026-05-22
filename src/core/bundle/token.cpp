@@ -6,7 +6,7 @@ import cactus.common;
 
 namespace cactus {
 
-export enum struct TokenType { IDENTIFIER = 256, NUMBER, STRING };
+export enum TokenType : int { IDENTIFIER = 256, NUMBER, STRING };
 
 export struct Token {
     TokenType type;

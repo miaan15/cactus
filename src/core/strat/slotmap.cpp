@@ -1,5 +1,7 @@
 module;
 
+#include <climits>
+
 export module cactus.core.strat:slotmap;
 
 import std;
@@ -9,8 +11,8 @@ using size_t = std::size_t;
 namespace cactus {
 
 export struct SlotMapKey {
-    size_t index : (sizeof(size_t) * 8) - 8;
-    size_t gen : 8;
+    size_t index : (sizeof(size_t) * CHAR_BIT) - CHAR_BIT;
+    size_t gen : CHAR_BIT;
 
     operator size_t() const { return *reinterpret_cast<const size_t *>(this); }
 };
