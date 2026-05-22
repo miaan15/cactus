@@ -2,22 +2,23 @@ module;
 
 #include <cassert>
 
-export module cactus.core.bundle:parser;
+export module cactus.core.parser;
 
 import cactus.common;
-import :token;
 
 namespace cactus {
+
+export enum TokenType : int { IDENTIFIER = 256, NUMBER, STRING };
+
+export struct Token {
+    TokenType type;
+    size_t len;
+};
 
 export struct ParserLocation {
     size_t index = 0;
     size_t column = 1;
     size_t line = 1;
-
-    auto advance_horizontal(size_t v) {
-        index += v;
-        column += v;
-    }
 };
 
 export struct Parser {
@@ -25,7 +26,6 @@ export struct Parser {
     struct IdentifierData {
         size_t point_to;
         size_t data_len;
-
         size_t parent_len;
     };
 
@@ -102,6 +102,7 @@ export struct Parser {
                     if (res_f.ptr == strv.data() + strv.size()) {
                         data.push_back(f_val);
                     } else {
+                        std::println("{}:{}: parse number failed, got {}", location.line, location.column, strv);
                         assert(false);
                         return;
                         // TODO error
@@ -132,6 +133,7 @@ export struct Parser {
                 pop_identifier_stack();
             } break;
             default: {
+                std::println("{}:{}: not recorgnize symbol", location.line, location.column);
                 assert(false);
                 return;
                 // TODO error
@@ -189,97 +191,111 @@ private:
     auto handle_lexer(std::string_view content_view) -> bool { // TODO error handle
         enum struct ReadState {
             EXPECT_IDENTIFIER,
+            EXPECT_VALUE_OR_ARR,
             AFTER_IDENTIFIER,
-            EXPECT_VALUE,
             AFTER_VALUE,
             AFTER_SEPARATOR,
-            AFTER_ARRAY,
+            AFTER_ARRAY_BEGIN,
+            AFTER_ARRAY_END,
         } state = ReadState::EXPECT_IDENTIFIER;
 
         ParserLocation cur_location;
 
+        auto advance_location_horizontal = [&](size_t v) {
+            cur_location.index += v;
+            cur_location.column += v;
+            content_view.remove_prefix(v);
+        };
         while (true) {
+            bool line_breaked = false;
             if (content_view.empty()) break;
             if (content_view.front() == '\n' || content_view.front() == '\t' || content_view.front() == ' ') {
-                handle_remove_spaces(&content_view, &cur_location);
+                handle_remove_spaces(&content_view, &cur_location, &line_breaked);
                 if (content_view.empty()) break;
             }
 
             switch (state) {
             case ReadState::EXPECT_IDENTIFIER: {
                 if (might_be_value(content_view.front())) {
+                    std::println("{}:{} expect identifier got {}", cur_location.line, cur_location.column,
+                                 content_view.substr(0, content_view.find_first_not_of(" \n\t")));
                     assert(false);
                     return false; // TODO error
                 }
 
                 size_t len = get_identifier_len(content_view);
                 tokens.push_back({cur_location, Token{.type = TokenType::IDENTIFIER, .len = len}});
-                cur_location.advance_horizontal(len);
-                content_view.remove_prefix(len);
+                advance_location_horizontal(len);
 
                 state = ReadState::AFTER_IDENTIFIER;
             } break;
 
+            case ReadState::EXPECT_VALUE_OR_ARR: {
+                switch (content_view.front()) {
+                case '{': {
+                    tokens.push_back({cur_location, Token{.type = (TokenType)content_view.front(), .len = 1}});
+                    advance_location_horizontal(1);
+
+                    state = ReadState::AFTER_ARRAY_BEGIN;
+                } break;
+                case '\"': {
+                    advance_location_horizontal(1);
+
+                    size_t end_string_i = content_view.find_first_of("\"");
+                    if (end_string_i != 0)
+                        tokens.push_back({cur_location, Token{.type = TokenType::STRING, .len = end_string_i}});
+
+                    advance_location_horizontal(end_string_i + 1);
+
+                    state = ReadState::AFTER_VALUE;
+                } break;
+                default: {
+                    if (might_be_value(content_view.front())) {
+                        size_t num_len = content_view.find_first_of(" \t\n,}");
+                        tokens.push_back({cur_location, Token{.type = TokenType::NUMBER, .len = num_len}});
+                        advance_location_horizontal(num_len);
+                    } else {
+                        std::println("{}:{} expect value got {}", cur_location.line, cur_location.column,
+                                     content_view.substr(0, content_view.find_first_not_of(" \n\t")));
+
+                        assert(false);
+                        return false; // TODO error
+                    }
+
+                    state = ReadState::AFTER_VALUE;
+                } break;
+                }
+            } break;
+
             case ReadState::AFTER_IDENTIFIER: {
                 if (content_view.front() != '=' && content_view.front() != '{') {
+                    std::println("{}:{} expect {{ or = got {}", cur_location.line, cur_location.column,
+                                 content_view.substr(0, content_view.find_first_not_of(" \n\t")));
+
                     assert(false);
                     return false; // TODO error
                 }
 
                 // the "{" will be handle later
                 if (content_view.front() == '=') {
-                    cur_location.advance_horizontal(1);
-                    content_view.remove_prefix(1);
+                    advance_location_horizontal(1);
                 }
 
-                state = ReadState::EXPECT_VALUE;
-            } break;
-
-            case ReadState::EXPECT_VALUE: {
-                switch (content_view.front()) {
-                case '{': {
-                    tokens.push_back({cur_location, Token{.type = (TokenType)content_view.front(), .len = 1}});
-                    cur_location.advance_horizontal(1);
-                    content_view.remove_prefix(1);
-                } break;
-                case '\"': {
-                    cur_location.advance_horizontal(1);
-                    content_view.remove_prefix(1);
-
-                    size_t end_string_i = content_view.find_first_of("\"");
-                    if (end_string_i != 0)
-                        tokens.push_back({cur_location, Token{.type = TokenType::STRING, .len = end_string_i}});
-                    cur_location.advance_horizontal(end_string_i + 1);
-                    content_view.remove_prefix(end_string_i + 1);
-                } break;
-                default: {
-                    if (might_be_value(content_view.front())) {
-                        size_t num_len = content_view.find_first_of(" \t\n,");
-                        tokens.push_back({cur_location, Token{.type = TokenType::NUMBER, .len = num_len}});
-                        cur_location.advance_horizontal(num_len);
-                        content_view.remove_prefix(num_len);
-                    } else {
-                        assert(false);
-                        return false; // TODO error
-                    }
-                } break;
-                }
-
-                state = ReadState::AFTER_VALUE;
+                state = ReadState::EXPECT_VALUE_OR_ARR;
             } break;
 
             case ReadState::AFTER_VALUE: {
                 switch (content_view.front()) {
                 case ',':
-                    cur_location.advance_horizontal(1);
-                    content_view.remove_prefix(1);
+                    advance_location_horizontal(1);
+
                     state = ReadState::AFTER_SEPARATOR;
                     break;
                 case '}':
                     tokens.push_back({cur_location, Token{.type = (TokenType)content_view.front(), .len = 1}});
-                    cur_location.advance_horizontal(1);
-                    content_view.remove_prefix(1);
-                    state = ReadState::AFTER_ARRAY;
+                    advance_location_horizontal(1);
+
+                    state = ReadState::AFTER_ARRAY_END;
                     break;
                 default:
                     state = ReadState::EXPECT_IDENTIFIER;
@@ -289,16 +305,27 @@ private:
 
             case ReadState::AFTER_SEPARATOR: {
                 if (might_be_value(content_view.front())) {
-                    state = ReadState::EXPECT_VALUE;
+                    state = ReadState::EXPECT_VALUE_OR_ARR;
+                } else if (content_view.front() == '}') {
+                    advance_location_horizontal(1);
+
+                    state = ReadState::AFTER_ARRAY_END;
                 } else {
                     state = ReadState::EXPECT_IDENTIFIER;
                 }
             } break;
 
-            case ReadState::AFTER_ARRAY: {
+            case ReadState::AFTER_ARRAY_BEGIN: {
+                if (might_be_value(content_view.front())) {
+                    state = ReadState::EXPECT_VALUE_OR_ARR;
+                } else {
+                    state = ReadState::EXPECT_IDENTIFIER;
+                }
+            } break;
+
+            case ReadState::AFTER_ARRAY_END: {
                 if (content_view.front() == ',') {
-                    cur_location.advance_horizontal(1);
-                    content_view.remove_prefix(1);
+                    advance_location_horizontal(1);
 
                     state = ReadState::AFTER_SEPARATOR;
                 } else {
@@ -311,7 +338,7 @@ private:
         return true;
     }
 
-    auto handle_remove_spaces(std::string_view *content_view, ParserLocation *location) -> void {
+    auto handle_remove_spaces(std::string_view *content_view, ParserLocation *location, bool *line_breaked) -> void {
         constexpr size_t TAB_WIDTH = 4;
 
         size_t removed = 0;
@@ -319,6 +346,7 @@ private:
             if (c == '\n') {
                 ++location->line;
                 location->column = 1;
+                *line_breaked = true;
             } else if (c == '\t') {
                 location->column += TAB_WIDTH - ((location->column - 1) % TAB_WIDTH);
             } else if (c == ' ') {
