@@ -9,15 +9,19 @@ using size_t = std::size_t;
 
 namespace cactus {
 
-export template <typename T>
-    requires(std::is_trivially_copyable<T>())
+export template <typename T, typename Alloc = std::allocator<T>>
+    requires std::is_trivially_copyable_v<T>
 struct DynamicArray {
+    using AllocTraits = std::allocator_traits<Alloc>;
+
     T *data = nullptr;
     size_t size = 0;
     size_t cap = 0;
 
-    static auto make() -> DynamicArray { return DynamicArray{.data_raw = nullptr, .size = 0, .cap = 0}; }
-    auto destroy() { std::free(data); }
+    [[no_unique_address]] Alloc allocator;
+
+    static auto make() -> DynamicArray { return DynamicArray{.data = nullptr, .size = 0, .cap = 0, .allocator = Alloc()}; }
+    auto destroy() { AllocTraits::deallocate(allocator, data, cap); }
 
     auto append(const T &val) noexcept {
         if (size == cap) { grow(size + 1); }
@@ -30,21 +34,26 @@ struct DynamicArray {
     }
 
     auto reserve(size_t new_cap) noexcept {
-        T *new_data = (T *)(std::realloc(data, new_cap * sizeof(T)));
+        if (new_cap <= cap) return;
 
-        if (!new_data) _assert(false, "DynamicArray failed to allocate more data");
+        T *new_data = AllocTraits::allocate(allocator, new_cap);
+
+        if (data) {
+            std::memcpy(new_data, data, size * sizeof(T));
+            AllocTraits::deallocate(allocator, data, cap);
+        }
 
         data = new_data;
         cap = new_cap;
     }
 
-    auto operator[](size_t index) noexcept -> std::optional<T> {
-        if (index >= size) return {};
+    auto operator[](size_t index) noexcept -> T & {
+        _assert(index < size, "Index out of bounds");
         return data[index];
     }
 
-    auto operator[](size_t index) const noexcept -> std::optional<const T> {
-        if (index >= size) return {};
+    auto operator[](size_t index) const noexcept -> const T & {
+        _assert(index < size, "Index out of bounds");
         return data[index];
     }
 
