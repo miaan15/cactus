@@ -196,7 +196,7 @@ struct HashMap {
         return nullptr;
     }
 
-    [[nodiscard]] auto get_or_add(const K &key) noexcept -> V * {
+    [[nodiscard]] auto get_or_add_ptr(const K &key) noexcept -> V * {
         if ((len + deleted_count) * 10 >= cap * 7) { rehash(cap == 0 ? 8 : cap * 2); }
 
         constexpr size_t EMPTY_DELETED_I = static_cast<size_t>(-1);
@@ -220,7 +220,7 @@ struct HashMap {
 
         return &slots[target].second;
     }
-    [[nodiscard]] auto get_or_add(K &&key) noexcept -> V * {
+    [[nodiscard]] auto get_or_add_ptr(K &&key) noexcept -> V * {
         if ((len + deleted_count) * 10 >= cap * 7) { rehash(cap == 0 ? 8 : cap * 2); }
 
         constexpr size_t EMPTY_DELETED_I = static_cast<size_t>(-1);
@@ -269,6 +269,63 @@ struct HashMap {
     }
 
     [[nodiscard]] auto empty() const noexcept -> bool { return len == 0; }
+
+    template <bool IsConst> struct IteratorImpl {
+        using map_type = std::conditional_t<IsConst, const HashMap, HashMap>;
+        using map_ptr = map_type *;
+        using slot_type = std::conditional_t<IsConst, const slot_t, slot_t>;
+
+        using iterator_category = std::forward_iterator_tag;
+        using value_type = slot_t;
+        using difference_type = std::ptrdiff_t;
+        using pointer = slot_type *;
+        using reference = slot_type &;
+
+        map_ptr map;
+        size_t index;
+
+        IteratorImpl(map_ptr m, size_t i) noexcept : map(m), index(i) { advance_to_valid(); }
+
+        auto advance_to_valid() noexcept -> void {
+            while (index < map->cap && map->states[index] != OCCUPIED) { ++index; }
+        }
+
+        [[nodiscard]] auto operator*() const noexcept -> reference { return map->slots[index]; }
+
+        [[nodiscard]] auto operator->() const noexcept -> pointer { return &map->slots[index]; }
+
+        auto operator++() noexcept -> IteratorImpl & {
+            ++index;
+            advance_to_valid();
+            return *this;
+        }
+
+        auto operator++(int) noexcept -> IteratorImpl {
+            IteratorImpl tmp = *this;
+            ++(*this);
+            return tmp;
+        }
+
+        [[nodiscard]] friend auto operator==(const IteratorImpl &a, const IteratorImpl &b) noexcept -> bool {
+            return a.index == b.index;
+        }
+
+        [[nodiscard]] friend auto operator!=(const IteratorImpl &a, const IteratorImpl &b) noexcept -> bool {
+            return a.index != b.index;
+        }
+    };
+
+    using iterator = IteratorImpl<false>;
+    using const_iterator = IteratorImpl<true>;
+
+    [[nodiscard]] auto begin() noexcept -> iterator { return iterator(this, 0); }
+    [[nodiscard]] auto end() noexcept -> iterator { return iterator(this, cap); }
+
+    [[nodiscard]] auto begin() const noexcept -> const_iterator { return const_iterator(this, 0); }
+    [[nodiscard]] auto end() const noexcept -> const_iterator { return const_iterator(this, cap); }
+
+    [[nodiscard]] auto cbegin() const noexcept -> const_iterator { return begin(); }
+    [[nodiscard]] auto cend() const noexcept -> const_iterator { return end(); }
 };
 
 } // namespace cactus

@@ -20,17 +20,17 @@ export template <typename T, typename Alloc = std::allocator<T>> struct FixedArr
         Alloc allocator = Alloc();
         T *data = alloc_traits_t::allocate(allocator, len);
         std::memset(data, 0, len * sizeof(T));
-        return FixedArray{.data_raw = data, .len = len, .allocator = allocator};
+        return FixedArray{.data = data, .len = len, .allocator = allocator};
     }
     auto destroy() noexcept {
         if (data) alloc_traits_t::deallocate(allocator, data, len);
     }
     [[nodiscard]] auto clone() noexcept -> FixedArray {
         T *new_data = alloc_traits_t::allocate(allocator, len);
-        return FixedArray{.data_raw = new_data, .len = len};
+        return FixedArray{.data = new_data, .len = len};
     }
 
-    [[nodiscard]] auto mmmmmlk(size_t new_len) noexcept {
+    [[nodiscard]] auto remake(size_t new_len) noexcept {
         if (new_len <= len) {
             len = new_len;
             std::memset(data, 0, new_len * sizeof(T));
@@ -62,6 +62,16 @@ export template <typename T, typename Alloc = std::allocator<T>> struct FixedArr
         if (index >= len) return {};
         return &data[index];
     }
+
+    using iterator = T *;
+    using const_iterator = const T *;
+
+    auto begin() -> iterator { return data; }
+    auto end() -> iterator { return data + len; }
+    auto begin() const -> const_iterator { return data; }
+    auto end() const -> const_iterator { return data + len; }
+    auto cbegin() const -> const_iterator { return data; }
+    auto cend() const -> const_iterator { return data + len; }
 };
 
 } // namespace cactus
