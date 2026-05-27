@@ -25,6 +25,8 @@ struct DynamicArray {
         if (data) { alloc_traits_t::deallocate(allocator, data, cap); }
     }
     [[nodiscard]] auto clone() noexcept -> DynamicArray {
+        if (cap == 0) return DynamicArray::make();
+
         T *new_data = alloc_traits_t::allocate(allocator, cap);
         memcpy(new_data, data, len * sizeof(T));
 
