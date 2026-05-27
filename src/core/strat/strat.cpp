@@ -2,5 +2,8 @@ module;
 
 export module cactus.core.strat;
 
-export import :slotmap;
-export import :fixedarr;
+export import :assert;
+export import :dynamic_array;
+export import :hash_map;
+export import :slot_map;
+export import :fixed_array;

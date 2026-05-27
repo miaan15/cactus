@@ -28,7 +28,7 @@ struct DynamicArray {
         if (cap == 0) return DynamicArray::make();
 
         T *new_data = alloc_traits_t::allocate(allocator, cap);
-        memcpy(new_data, data, len * sizeof(T));
+        std::memcpy(new_data, data, len * sizeof(T));
 
         return DynamicArray{.data = new_data, .len = len, .cap = cap, .allocator = allocator};
     }
@@ -83,12 +83,17 @@ struct DynamicArray {
 
     auto clear() noexcept { len = 0; }
 
-    auto begin() noexcept -> T * { return data; }
-    auto end() noexcept -> T * { return data + len; }
-    auto begin() const noexcept -> const T * { return data; }
-    auto end() const noexcept -> const T * { return data + len; }
+    using iterator = T *;
+    using const_iterator = const T *;
 
-    auto empty() const noexcept -> bool { return len == 0; }
+    auto begin() -> iterator { return data; }
+    auto end() -> iterator { return data + len; }
+    auto begin() const -> const_iterator { return data; }
+    auto end() const -> const_iterator { return data + len; }
+    auto cbegin() const -> const_iterator { return data; }
+    auto cend() const -> const_iterator { return data + len; }
+
+    [[nodiscard]] auto empty() const noexcept -> bool { return len == 0; }
 
     auto grow(size_t min_cap) noexcept {
         size_t new_cap = cap == 0 ? 4 : cap + (cap / 2);

@@ -66,7 +66,7 @@ struct HashMap {
         if (!new_slots) _assert(false, "HashMap failed to allocate memory");
         SlotState *new_states = state_alloc_traits_t::allocate(state_allocator, new_cap);
         if (!new_states) _assert(false, "HashMap failed to allocate memory");
-        memset(new_states, EMPTY, new_cap * sizeof(SlotState));
+        std::memset(new_states, EMPTY, new_cap * sizeof(SlotState));
 
         if (slots) {
             for (size_t i = 0; i < cap; ++i) {
@@ -245,6 +245,17 @@ struct HashMap {
         return &slots[target].second;
     }
 
+    [[nodiscard]] auto has(const K &key) const noexcept -> bool {
+        if (cap == 0) return false;
+        size_t hash = Hash{}(key);
+        size_t index = hash & (cap - 1);
+        while (states[index] != EMPTY) {
+            if (states[index] == OCCUPIED && KeyEqual{}(slots[index].first, key)) { return true; }
+            index = (index + 1) & (cap - 1);
+        }
+        return false;
+    }
+
     auto clear() noexcept {
         if (!slots) return;
 
@@ -257,7 +268,7 @@ struct HashMap {
         deleted_count = 0;
     }
 
-    auto is_empty() const noexcept -> bool { return len == 0; }
+    [[nodiscard]] auto empty() const noexcept -> bool { return len == 0; }
 };
 
 } // namespace cactus
