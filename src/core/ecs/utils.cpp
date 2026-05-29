@@ -25,16 +25,16 @@ struct WorldComponentUtilities {
 
     template <size_t I> using component_at_t = typename std::tuple_element<I, std::tuple<Ts...>>::type;
 
-    template <size_t I> [[nodiscard]] constexpr auto get_size() -> size_t {
+    template <size_t I> [[nodiscard]] static constexpr auto get_size() -> size_t {
         static_assert(I < sizeof...(Ts), "Component index out of bounds");
         return sizeof(component_at_t<I>);
     }
-    template <size_t I> [[nodiscard]] constexpr auto get_align() -> size_t {
+    template <size_t I> [[nodiscard]] static constexpr auto get_align() -> size_t {
         static_assert(I < sizeof...(Ts), "Component index out of bounds");
         return alignof(component_at_t<I>);
     }
 
-    [[nodiscard]] constexpr auto get_total_size() -> size_t {
+    [[nodiscard]] static constexpr auto get_total_size() -> size_t {
         size_t res = 0;
         size_t max_align = 1;
         (..., (max_align = std::max(max_align, alignof(Ts)), res = align_up(res, alignof(Ts)) + sizeof(Ts)));
@@ -42,4 +42,4 @@ struct WorldComponentUtilities {
     }
 };
 
-} // namespace cactus
+} // namespace cactus::detail::ecs

@@ -32,9 +32,9 @@ export template <typename... Ts> struct WorldQuery {
             size_t cur_row_index;
 
             template <typename T>
-                requires(world_t::component_register_t::template has<T>())
+                requires(world_t::component_utils_t::template has<T>())
             [[nodiscard]] auto get() const -> std::optional<T> {
-                size_t component_index = world_t::component_register_t::template get_index<T>();
+                size_t component_index = world_t::component_utils_t::template get_index<T>();
 
                 if (!table_ref->signature.test(component_index)) { return {}; }
 
@@ -43,9 +43,9 @@ export template <typename... Ts> struct WorldQuery {
             }
 
             template <typename T>
-                requires(world_t::component_register_t::template has<T>())
+                requires(world_t::component_utils_t::template has<T>())
             [[nodiscard]] auto get_ptr() const -> T * {
-                size_t component_index = world_t::component_register_t::template get_index<T>();
+                size_t component_index = world_t::component_utils_t::template get_index<T>();
 
                 if (!table_ref->signature.test(component_index)) { return nullptr; }
 
@@ -53,9 +53,9 @@ export template <typename... Ts> struct WorldQuery {
                 return static_cast<T *>(ptr);
             }
             template <typename T>
-                requires(world_t::component_register_t::template has<T>())
+                requires(world_t::component_utils_t::template has<T>())
             [[nodiscard]] auto get_const_ptr() const -> const T * {
-                size_t component_index = world_t::component_register_t::template get_index<T>();
+                size_t component_index = world_t::component_utils_t::template get_index<T>();
 
                 if (!table_ref->signature.test(component_index)) { return nullptr; }
 
@@ -80,8 +80,8 @@ export template <typename... Ts> struct WorldQuery {
         }
 
         [[nodiscard]] auto operator*() const -> value_type {
-            auto &table = source->world_ref->world_impl.tables[cur_table_index];
-            return {table.owner_list_raw[cur_row_index], {.table_ref = &table, .cur_row_index = cur_row_index}};
+            auto *table = source->world_ref->tables.get_ptr(cur_table_index);
+            return {table->owner_list_raw[cur_row_index], PrefabQuery{.table_ref = table, .cur_row_index = cur_row_index}};
         }
 
         auto operator++() -> iterator & {
@@ -100,12 +100,12 @@ export template <typename... Ts> struct WorldQuery {
 
     private:
         auto skip_invalid() -> void {
-            const auto &tables = source->world_ref->world_impl.tables;
-            while (cur_table_index < tables.size()) {
-                const auto &table = tables[cur_table_index];
+            const auto &tables = source->world_ref->tables;
+            while (cur_table_index < tables.len) {
+                const auto *table = tables.get_ptr(cur_table_index);
 
-                if ((table.signature & source->signature) == source->signature) {
-                    if (cur_row_index < table.len) { return; }
+                if ((table->signature & source->signature) == source->signature) {
+                    if (cur_row_index < table->len) { return; }
                 }
 
                 ++cur_table_index;
@@ -118,7 +118,7 @@ export template <typename... Ts> struct WorldQuery {
 
     [[nodiscard]] auto begin() const -> iterator { return iterator{this, 0, 0}; }
 
-    [[nodiscard]] auto end() const -> iterator { return iterator{this, world_ref->world_impl.tables.size(), 0}; }
+    [[nodiscard]] auto end() const -> iterator { return iterator{this, world_ref->tables.len, 0}; }
 };
 
 export template <typename... Ts> struct WorldQueryBuilder {
@@ -137,9 +137,9 @@ export template <typename... Ts> struct WorldQueryBuilder {
     WorldQueryBuilder &operator=(WorldQueryBuilder &&other) noexcept = default;
 
     template <typename... Us>
-        requires((world_t::component_register_t::template has<Us>() && ...))
+        requires((world_t::component_utils_t::template has<Us>() && ...))
     auto with() -> WorldQueryBuilder & {
-        (..., signature.set(world_t::component_register_t::template get_index<Us>()));
+        (..., signature.set(world_t::component_utils_t::template get_index<Us>()));
         return *this;
     }
 

@@ -20,13 +20,11 @@ export struct Table {
 
     FixedArray<size_t> component_offset_list;
 
-    [[nodiscard]] static auto make(Signature signature, size_t component_count,
-                                   const FixedArray<ComponentData> &component_data_list) -> Table {
+    [[nodiscard]] static auto make(Signature signature, const FixedArray<ComponentData> &component_data_list) -> Table {
         size_t offset = 0;
         size_t max_align = 1;
 
-        auto component_offset_list = FixedArray<size_t>::make(component_count);
-        auto signature_ull = signature.to_ullong();
+        auto component_offset_list = FixedArray<size_t>::make(component_data_list.len);
         for (auto signature_ull = signature.to_ullong(); signature_ull > 0; signature_ull &= (signature_ull - 1)) {
             int component_index = __builtin_ctzll(signature_ull);
             auto component_data_opt = component_data_list.get(component_index);
@@ -81,17 +79,11 @@ export struct Table {
     auto reserve(size_t new_cap) {
         if (new_cap <= cap) return;
 
-        char *new_table_raw = (char *)std::malloc(new_cap * row_size);
-        Entity *new_owner_list_raw = (Entity *)std::malloc(new_cap * sizeof(Entity));
+        auto *new_table_raw = (char *)std::realloc(table_raw, new_cap * row_size);
+        _assert(new_table_raw, "Failed to reallocate table_raw");
 
-        if (table_raw != nullptr) {
-            std::memcpy(new_table_raw, table_raw, len * row_size);
-            std::free(table_raw);
-        }
-        if (owner_list_raw != nullptr) {
-            std::memcpy(new_owner_list_raw, owner_list_raw, len * sizeof(Entity));
-            std::free(owner_list_raw);
-        }
+        auto *new_owner_list_raw = (Entity *)std::realloc(owner_list_raw, new_cap * sizeof(Entity));
+        _assert(new_owner_list_raw, "Failed to reallocate owner_list_raw");
 
         table_raw = new_table_raw;
         owner_list_raw = new_owner_list_raw;
@@ -100,8 +92,7 @@ export struct Table {
 
     auto new_row(Entity entity_owner) -> size_t {
         if (len >= cap) {
-            size_t new_cap = cap * 2;
-            if (new_cap < 1) new_cap = 1;
+            size_t new_cap = cap < 4 ? 4 : cap + (cap / 2);
             reserve(new_cap);
         }
 

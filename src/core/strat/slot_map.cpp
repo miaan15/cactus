@@ -42,14 +42,18 @@ struct SlotMap {
             using T_alloc_traits_t = std::allocator_traits<T_alloc_t>;
             T_alloc_t t_alloc{slot_alloc};
             T_alloc_traits_t::deallocate(t_alloc, data, cap);
+            data = nullptr;
         }
 
         if (slot_indexes) {
-            using size_alloc_t = typename std::allocator_traits<slot_allocator_t>::template rebind_alloc<T>;
+            using size_alloc_t = typename std::allocator_traits<slot_allocator_t>::template rebind_alloc<size_t>;
             using size_alloc_traits_t = std::allocator_traits<size_alloc_t>;
             size_alloc_t size_alloc{slot_alloc};
-            size_alloc_traits_t::deallocate(size_alloc, data, cap);
+            size_alloc_traits_t::deallocate(size_alloc, slot_indexes, cap);
+            slot_indexes = nullptr;
         }
+
+        slots.destroy();
     }
     [[nodiscard]] auto clone() const noexcept -> SlotMap {
         if (cap == 0) return SlotMap::make();

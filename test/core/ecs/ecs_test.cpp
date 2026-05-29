@@ -20,7 +20,7 @@ struct Health {
 };
 
 TEST_CASE("EcsWorld_EntityAndSignature") {
-    auto world = World<Position, Velocity, Health>();
+    auto world = World<Position, Velocity, Health>::make();
 
     Entity e1 = world.new_entity();
     Entity e2 = world.new_entity();
@@ -43,10 +43,12 @@ TEST_CASE("EcsWorld_EntityAndSignature") {
 
     world.add_component<Velocity>(e1);
     CHECK(world.get_entity_signature(e1)->count() == 2);
+
+    world.destroy();
 }
 
 TEST_CASE("EcsWorld_AddRemoveGetComponent") {
-    auto world = World<Position, Velocity, Health>();
+    auto world = World<Position, Velocity, Health>::make();
 
     Entity e = world.new_entity();
 
@@ -109,15 +111,17 @@ TEST_CASE("EcsWorld_AddRemoveGetComponent") {
         Position *pos_ptr = world.get_component_ptr<Position>(e);
         CHECK(pos_ptr == nullptr);
     }
+
+    world.destroy();
 }
 
 TEST_CASE("EcsWorld_StressTest") {
-    auto world = World<Position, Velocity, Health>();
+    auto world = World<Position, Velocity, Health>::make();
 
     Entity entities[32];
     for (int i = 0; i < 32; i++) { entities[i] = world.new_entity(); }
 
-    CHECK(world.world_impl.entities_data.len == 32);
+    CHECK(world.entities_data.len == 32);
 
     SUBCASE("Add components to all entities") {
         for (int i = 0; i < 32; i++) {
@@ -132,9 +136,9 @@ TEST_CASE("EcsWorld_StressTest") {
             CHECK(pos->x == static_cast<float>(i));
         }
 
-        CHECK(world.world_impl.signature_to_table_index_map.size() == 1);
-        CHECK(world.world_impl.tables.size() == 1);
-        CHECK(world.world_impl.tables[0].len == 32);
+        CHECK(world.signature_to_table_index_map.len == 1);
+        CHECK(world.tables.len == 1);
+        CHECK(world.tables.get_ptr(0)->len == 32);
     }
 
     SUBCASE("Repeated add and remove") {
@@ -150,7 +154,7 @@ TEST_CASE("EcsWorld_StressTest") {
         }
         CHECK_FALSE(world.has_component<Position>(e));
 
-        CHECK(world.world_impl.tables[0].len == 0);
+        CHECK(world.tables.get_ptr(0)->len == 0);
     }
 
     SUBCASE("Add duplicate component") {
@@ -163,7 +167,7 @@ TEST_CASE("EcsWorld_StressTest") {
         CHECK(p2->x == 10.0f);
         CHECK(p2->y == 20.0f);
 
-        CHECK(world.world_impl.tables[0].len == 1);
+        CHECK(world.tables.get_ptr(0)->len == 1);
     }
 
     SUBCASE("Remove non-existent component") {
@@ -180,39 +184,39 @@ TEST_CASE("EcsWorld_StressTest") {
         vel0->dx = 0.5f;
         vel0->dy = 0.5f;
 
-        CHECK(world.world_impl.signature_to_table_index_map.size() == 2);
-        CHECK(world.world_impl.tables.size() == 2);
-        CHECK(world.world_impl.tables[0].len == 0); // entities[0] migrated away
-        CHECK(world.world_impl.tables[1].len == 1); // holds entities[0] ([Pos, Vel])
+        CHECK(world.signature_to_table_index_map.len == 2);
+        CHECK(world.tables.len == 2);
+        CHECK(world.tables.get_ptr(0)->len == 0); // entities[0] migrated away
+        CHECK(world.tables.get_ptr(1)->len == 1); // holds entities[0] ([Pos, Vel])
 
         // Variadic bulk allocation bypasses intermediate table footprints
         world.add_component<Position, Health, Velocity>(entities[1]);
 
-        CHECK(world.world_impl.signature_to_table_index_map.size() == 3);
-        CHECK(world.world_impl.tables.size() == 3);
-        CHECK(world.world_impl.tables[0].len == 0); // [Pos]
-        CHECK(world.world_impl.tables[1].len == 1); // [Pos, Vel] -> entities[0]
-        CHECK(world.world_impl.tables[2].len == 1); // [Pos, Vel, Health] -> entities[1]
+        CHECK(world.signature_to_table_index_map.len == 3);
+        CHECK(world.tables.len == 3);
+        CHECK(world.tables.get_ptr(0)->len == 0); // [Pos]
+        CHECK(world.tables.get_ptr(1)->len == 1); // [Pos, Vel] -> entities[0]
+        CHECK(world.tables.get_ptr(2)->len == 1); // [Pos, Vel, Health] -> entities[1]
 
         world.remove_component<Health>(entities[1]);
 
         // Remap targets existing archetype [Pos, Vel]
-        CHECK(world.world_impl.signature_to_table_index_map.size() == 3);
-        CHECK(world.world_impl.tables.size() == 3);
-        CHECK(world.world_impl.tables[0].len == 0); // [Pos]
-        CHECK(world.world_impl.tables[1].len == 2); // [Pos, Vel] -> entities[0], entities[1]
-        CHECK(world.world_impl.tables[2].len == 0); // [Pos, Vel, Health] is now empty
+        CHECK(world.signature_to_table_index_map.len == 3);
+        CHECK(world.tables.len == 3);
+        CHECK(world.tables.get_ptr(0)->len == 0); // [Pos]
+        CHECK(world.tables.get_ptr(1)->len == 2); // [Pos, Vel] -> entities[0], entities[1]
+        CHECK(world.tables.get_ptr(2)->len == 0); // [Pos, Vel, Health] is now empty
 
         world.add_component<Health>(entities[1]); // entities[1] moves back to [Pos, Vel, Health]
 
         world.add_component<Health>(entities[2]); // Creates a unique [Health] table
 
-        CHECK(world.world_impl.signature_to_table_index_map.size() == 4);
-        CHECK(world.world_impl.tables.size() == 4);
-        CHECK(world.world_impl.tables[0].len == 0); // [Pos]
-        CHECK(world.world_impl.tables[1].len == 1); // [Pos, Vel] -> entities[0]
-        CHECK(world.world_impl.tables[2].len == 1); // [Pos, Vel, Health] -> entities[1]
-        CHECK(world.world_impl.tables[3].len == 1); // [Health] -> entities[2]
+        CHECK(world.signature_to_table_index_map.len == 4);
+        CHECK(world.tables.len == 4);
+        CHECK(world.tables.get_ptr(0)->len == 0); // [Pos]
+        CHECK(world.tables.get_ptr(1)->len == 1); // [Pos, Vel] -> entities[0]
+        CHECK(world.tables.get_ptr(2)->len == 1); // [Pos, Vel, Health] -> entities[1]
+        CHECK(world.tables.get_ptr(3)->len == 1); // [Health] -> entities[2]
 
         CHECK(world.has_component<Position>(entities[0]));
         CHECK(world.has_component<Velocity>(entities[0]));
@@ -249,10 +253,10 @@ TEST_CASE("EcsWorld_StressTest") {
             CHECK_FALSE(world.has_component<Velocity>(e));
         }
 
-        CHECK(world.world_impl.signature_to_table_index_map.size() == 2);
-        CHECK(world.world_impl.tables.size() == 2);
-        CHECK(world.world_impl.tables[0].len == 1); // [Pos] contains entity 'e'
-        CHECK(world.world_impl.tables[1].len == 0); // [Pos, Vel] is empty
+        CHECK(world.signature_to_table_index_map.len == 2);
+        CHECK(world.tables.len == 2);
+        CHECK(world.tables.get_ptr(0)->len == 1); // [Pos] contains entity 'e'
+        CHECK(world.tables.get_ptr(1)->len == 0); // [Pos, Vel] is empty
     }
 
     SUBCASE("Remove all components") {
@@ -307,7 +311,7 @@ TEST_CASE("EcsWorld_StressTest") {
 
         // Validate the tracking layers are completely in sync after the chaos
         size_t aggregate_table_len = 0;
-        for (const auto &table : world.world_impl.tables) {
+        for (const auto &table : world.tables) {
             aggregate_table_len += table.len;
 
             // Make sure internal tracking mirrors physical owner slots
@@ -315,7 +319,7 @@ TEST_CASE("EcsWorld_StressTest") {
                 Entity internal_owner = table.owner_list_raw[row];
                 REQUIRE(world.has_entity(internal_owner));
 
-                auto stored_data = world.world_impl.entities_data.get(internal_owner).value();
+                auto stored_data = world.entities_data.get(internal_owner).value();
                 CHECK(stored_data.table_row_index == row);
             }
         }
@@ -328,10 +332,12 @@ TEST_CASE("EcsWorld_StressTest") {
         }
         CHECK(aggregate_table_len == active_entities);
     }
+
+    world.destroy();
 }
 
 TEST_CASE("EcsWorld_Query") {
-    auto world = World<Position, Velocity, Health>();
+    auto world = World<Position, Velocity, Health>::make();
 
     Entity entities[10];
     for (int i = 0; i < 10; i++) { entities[i] = world.new_entity(); }
@@ -400,4 +406,6 @@ TEST_CASE("EcsWorld_Query") {
         for (auto [entity, prefab] : query) { count++; }
         CHECK(count == 3); // entities[7-9]
     }
+
+    world.destroy();
 }

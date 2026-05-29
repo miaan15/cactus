@@ -5,6 +5,7 @@ export module cactus.core.ecs:world;
 import :defines;
 import :utils;
 import :table;
+import :query;
 import cactus.common;
 import cactus.core.strat;
 
@@ -31,14 +32,12 @@ struct World {
     DynamicArray<Table> tables;
 
     [[nodiscard]] static auto make() -> World {
-        component_utils_t component_register;
-
-        size_t component_count = component_register.size();
+        size_t component_count = component_utils_t::count();
         auto component_data_list = FixedArray<ComponentData>::make(component_count);
 
         [&]<std::size_t... Is>(std::index_sequence<Is...>) {
             (..., component_data_list.set(
-                      Is, {component_register.template get_size<Is>(), component_register.template get_align<Is>()}));
+                      Is, {component_utils_t::template get_size<Is>(), component_utils_t::template get_align<Is>()}));
         }(std::make_index_sequence<sizeof...(Ts)>{});
 
         return World{.entities_data = SlotMap<EntityData>::make(),
@@ -48,12 +47,14 @@ struct World {
                      .tables = DynamicArray<Table>::make()};
     }
     auto destroy() {
+        for (auto &t : tables) t.destroy();
+
         entities_data.destroy();
         component_data_list.destroy();
         signature_to_table_index_map.destroy();
         tables.destroy();
     }
-    [[nodiscard]] auto clone() = delete;
+    [[nodiscard]] auto clone() = delete; // FIXME
 
     [[nodiscard]] auto new_entity() -> Entity { return entities_data.add(EntityData{Signature{}, 0}); }
 
@@ -67,8 +68,9 @@ struct World {
         if (component_index >= component_count) return nullptr; // component out of bound
         auto entity_data_opt = entities_data.get(entity);
         if (!entity_data_opt.has_value()) return nullptr; // if entity not existed
+        EntityData entity_data = entity_data_opt.value();
 
-        Signature signature = entity_data_opt.value().signature;
+        Signature signature = entity_data.signature;
         _assert(!signature.any() || signature_to_table_index_map.has(signature),
                 "Entity's signature should be empty or already existed");
 
@@ -77,14 +79,15 @@ struct World {
         size_t table_index = signature_to_table_index_map.get(signature).value();
         _assert(table_index < tables.len, "Table index shoule be existed");
 
-        return tables.get_ptr(table_index)->get_component_ptr(entity_data_opt->table_row_index, component_index);
+        return tables.get_ptr(table_index)->get_component_ptr(entity_data.table_row_index, component_index);
     }
     [[nodiscard]] auto get_component_ptr(Entity entity, size_t component_index) const -> const void * {
         if (component_index >= component_count) return nullptr; // component out of bound
         auto entity_data_opt = entities_data.get(entity);
         if (!entity_data_opt.has_value()) return nullptr; // if entity not existed
+        EntityData entity_data = entity_data_opt.value();
 
-        Signature signature = entity_data_opt.value().signature;
+        Signature signature = entity_data.signature;
         _assert(!signature.any() || signature_to_table_index_map.has(signature),
                 "Entity's signature should be empty or already existed");
 
@@ -93,15 +96,16 @@ struct World {
         size_t table_index = signature_to_table_index_map.get(signature).value();
         _assert(table_index < tables.len, "Table index shoule be existed");
 
-        return tables.get_ptr(table_index)->get_component_ptr(entity_data_opt->table_row_index, component_index);
+        return tables.get_ptr(table_index)->get_component_ptr(entity_data.table_row_index, component_index);
     }
 
-    [[nodiscard]] auto has_component(Entity entity, size_t component_index) -> bool {
+    [[nodiscard]] auto has_component(Entity entity, size_t component_index) const -> bool {
         if (component_index >= component_count) return false; // component out of bound
         auto entity_data_opt = entities_data.get(entity);
         if (!entity_data_opt.has_value()) return false;
+        EntityData entity_data = entity_data_opt.value();
 
-        Signature signature = entity_data_opt.value().signature;
+        Signature signature = entity_data.signature;
         _assert(!signature.any() || signature_to_table_index_map.has(signature),
                 "Entity's signature should be empty or already existed");
 
@@ -112,8 +116,9 @@ struct World {
         if (component_index >= component_count) return nullptr; // component out of bound
         auto entity_data_opt = entities_data.get(entity);
         if (!entity_data_opt.has_value()) return nullptr; // if entity not existed
+        EntityData entity_data = entity_data_opt.value();
 
-        Signature cur_signature = entity_data_opt.value().signature;
+        Signature cur_signature = entity_data.signature;
         _assert(!cur_signature.any() || signature_to_table_index_map.has(cur_signature),
                 "Entity's signature should be empty or already existed");
 
@@ -124,7 +129,8 @@ struct World {
         new_signature.set(component_index);
 
         // get new table, create new table if needed
-        size_t new_table_index = signature_to_table_index_map.get(new_signature).value_or(new_table(new_signature));
+        auto new_table_opt = signature_to_table_index_map.get(new_signature);
+        size_t new_table_index = new_table_opt.has_value() ? new_table_opt.value() : new_table(new_signature);
 
         // if current signature is empty or the entity has not existed in a table: just create new row in table
         if (!cur_signature.any()) {
@@ -140,7 +146,7 @@ struct World {
             size_t cur_table_index = signature_to_table_index_map.get(cur_signature).value();
             Table *cur_table = tables.get_ptr(cur_table_index);
 
-            size_t cur_row_index = entity_data_opt.value().table_row_index;
+            size_t cur_row_index = entity_data.table_row_index;
 
             char *cur_row_ptr = (char *)cur_table->get_row_ptr(cur_row_index);
             char *new_row_ptr = (char *)new_table->get_row_ptr(new_table->len - 1);
@@ -156,7 +162,7 @@ struct World {
 
             if (auto moved_entity_opt = cur_table->remove_row(cur_row_index)) {
                 Entity moved_entity = moved_entity_opt.value();
-                assert(entities_data.has(moved_entity) && "The entity in the last of table should already existed");
+                _assert(entities_data.has(moved_entity), "The entity in the last of table should already existed");
 
                 auto moved_entity_data = entities_data.get(moved_entity).value();
                 moved_entity_data.table_row_index = cur_row_index;
@@ -172,8 +178,9 @@ struct World {
     auto add_component(Entity entity, std::initializer_list<size_t> component_index_list) -> void {
         auto entity_data_opt = entities_data.get(entity);
         if (!entity_data_opt.has_value()) return; // if entity not existed
+        EntityData entity_data = entity_data_opt.value();
 
-        Signature cur_signature = entity_data_opt.value().signature;
+        Signature cur_signature = entity_data.signature;
         _assert(!cur_signature.any() || signature_to_table_index_map.has(cur_signature),
                 "Entity's signature should be empty or already existed");
 
@@ -184,7 +191,8 @@ struct World {
         if (new_signature == cur_signature) return;
 
         // get new table, create new table if needed
-        size_t new_table_index = signature_to_table_index_map.get(new_signature).value_or(new_table(new_signature));
+        auto new_table_opt = signature_to_table_index_map.get(new_signature);
+        size_t new_table_index = new_table_opt.has_value() ? new_table_opt.value() : new_table(new_signature);
 
         // if current signature is empty or the entity has not existed in a table: just create new row in table
         if (!cur_signature.any()) {
@@ -200,7 +208,7 @@ struct World {
             size_t cur_table_index = signature_to_table_index_map.get(cur_signature).value();
             Table *cur_table = tables.get_ptr(cur_table_index);
 
-            size_t cur_row_index = entity_data_opt.value().table_row_index;
+            size_t cur_row_index = entity_data.table_row_index;
 
             char *cur_row_ptr = (char *)cur_table->get_row_ptr(cur_row_index);
             char *new_row_ptr = (char *)new_table->get_row_ptr(new_table->len - 1);
@@ -216,7 +224,7 @@ struct World {
 
             if (auto moved_entity_opt = cur_table->remove_row(cur_row_index)) {
                 Entity moved_entity = moved_entity_opt.value();
-                _assert(entities_data.has(moved_entity) && "The entity in the last of table should already existed");
+                _assert(entities_data.has(moved_entity), "The entity in the last of table should already existed");
 
                 auto moved_entity_data = entities_data.get(moved_entity).value();
                 moved_entity_data.table_row_index = cur_row_index;
@@ -231,8 +239,9 @@ struct World {
         if (component_index >= component_count) return false; // component out of bound
         auto entity_data_opt = entities_data.get(entity);
         if (!entity_data_opt.has_value()) return false; // if entity not existed
+        EntityData entity_data = entity_data_opt.value();
 
-        Signature cur_signature = entity_data_opt.value().signature;
+        Signature cur_signature = entity_data.signature;
         _assert(!cur_signature.any() || signature_to_table_index_map.has(cur_signature),
                 "Entity's signature should be empty or already existed");
 
@@ -245,7 +254,7 @@ struct World {
             size_t cur_table_index = signature_to_table_index_map.get(cur_signature).value();
             Table *cur_table = tables.get_ptr(cur_table_index);
 
-            size_t cur_row_index = entity_data_opt.value().table_row_index;
+            size_t cur_row_index = entity_data.table_row_index;
 
             if (auto moved_entity_opt = cur_table->remove_row(cur_row_index)) {
                 Entity moved_entity = moved_entity_opt.value();
@@ -261,7 +270,8 @@ struct World {
         }
 
         // get new table, create new table if needed
-        size_t new_table_index = signature_to_table_index_map.get(new_signature).value_or(new_table(new_signature));
+        auto new_table_opt = signature_to_table_index_map.get(new_signature);
+        size_t new_table_index = new_table_opt.has_value() ? new_table_opt.value() : new_table(new_signature);
 
         Table *new_table = tables.get_ptr(new_table_index);
         new_table->new_row(entity);
@@ -269,7 +279,7 @@ struct World {
         size_t cur_table_index = signature_to_table_index_map.get(cur_signature).value();
         Table *cur_table = tables.get_ptr(cur_table_index);
 
-        size_t cur_row_index = entity_data_opt.value().table_row_index;
+        size_t cur_row_index = entity_data.table_row_index;
 
         char *cur_row_ptr = (char *)cur_table->get_row_ptr(cur_row_index);
         char *new_row_ptr = (char *)new_table->get_row_ptr(new_table->len - 1);
@@ -299,8 +309,9 @@ struct World {
     auto remove_component(Entity entity, std::initializer_list<size_t> component_index_list) -> void {
         auto entity_data_opt = entities_data.get(entity);
         if (!entity_data_opt.has_value()) return; // if entity not existed
+        EntityData entity_data = entity_data_opt.value();
 
-        Signature cur_signature = entity_data_opt.value().signature;
+        Signature cur_signature = entity_data.signature;
         _assert(!cur_signature.any() || signature_to_table_index_map.has(cur_signature),
                 "Entity's signature should be empty or already existed");
 
@@ -313,7 +324,7 @@ struct World {
             size_t cur_table_index = signature_to_table_index_map.get(cur_signature).value();
             Table *cur_table = tables.get_ptr(cur_table_index);
 
-            size_t cur_row_index = entity_data_opt.value().table_row_index;
+            size_t cur_row_index = entity_data.table_row_index;
 
             if (auto moved_entity_opt = cur_table->remove_row(cur_row_index)) {
                 Entity moved_entity = moved_entity_opt.value();
@@ -328,7 +339,8 @@ struct World {
         }
 
         // get new table, create new table if needed
-        size_t new_table_index = signature_to_table_index_map.get(new_signature).value_or(new_table(new_signature));
+        auto new_table_opt = signature_to_table_index_map.get(new_signature);
+        size_t new_table_index = new_table_opt.has_value() ? new_table_opt.value() : new_table(new_signature);
 
         Table *new_table = tables.get_ptr(new_table_index);
         new_table->new_row(entity);
@@ -336,7 +348,7 @@ struct World {
         size_t cur_table_index = signature_to_table_index_map.get(cur_signature).value();
         Table *cur_table = tables.get_ptr(cur_table_index);
 
-        size_t cur_row_index = entity_data_opt.value().table_row_index;
+        size_t cur_row_index = entity_data.table_row_index;
 
         char *cur_row_ptr = (char *)cur_table->get_row_ptr(cur_row_index);
         char *new_row_ptr = (char *)new_table->get_row_ptr(new_table->len - 1);
@@ -409,11 +421,13 @@ struct World {
         remove_component(entity, {component_utils_t::template get_index<Us>()...});
     }
 
+    [[nodiscard]] auto query_builder() -> WorldQueryBuilder<Ts...> { return WorldQueryBuilder<Ts...>(this); }
+
 private:
     auto new_table(Signature signature) -> size_t {
         _assert(!signature_to_table_index_map.has(signature), "Signature should not already existed");
 
-        tables.append(Table::make(signature, component_count, component_data_list));
+        tables.append(Table::make(signature, component_data_list));
         signature_to_table_index_map.add(signature, tables.len - 1);
 
         return tables.len - 1;
