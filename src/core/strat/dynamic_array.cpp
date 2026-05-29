@@ -24,13 +24,14 @@ struct DynamicArray {
     auto destroy() noexcept {
         if (data) { alloc_traits_t::deallocate(allocator, data, cap); }
     }
-    [[nodiscard]] auto clone() noexcept -> DynamicArray {
+    [[nodiscard]] auto clone() const noexcept -> DynamicArray {
         if (cap == 0) return DynamicArray::make();
 
-        T *new_data = alloc_traits_t::allocate(allocator, cap);
+        Alloc new_allocator = Alloc(allocator);
+        T *new_data = alloc_traits_t::allocate(new_allocator, cap);
         std::memcpy(new_data, data, len * sizeof(T));
 
-        return DynamicArray{.data = new_data, .len = len, .cap = cap, .allocator = allocator};
+        return DynamicArray{.data = new_data, .len = len, .cap = cap, .allocator = new_allocator};
     }
 
     auto reserve(size_t new_cap) noexcept {
@@ -96,7 +97,7 @@ struct DynamicArray {
     [[nodiscard]] auto empty() const noexcept -> bool { return len == 0; }
 
     auto grow(size_t min_cap) noexcept {
-        size_t new_cap = cap == 0 ? 4 : cap + (cap / 2);
+        size_t new_cap = cap < 4 ? 4 : cap + (cap / 2);
         if (new_cap < min_cap) new_cap = min_cap;
 
         reserve(new_cap);

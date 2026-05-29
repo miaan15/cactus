@@ -157,7 +157,7 @@ if(CACTUS_BUILD_TESTS)
     file(GLOB_RECURSE TEST_SRCS CONFIGURE_DEPENDS "${TEST_DIR}/*.cpp")
     foreach(TEST_SOURCE IN LISTS TEST_SRCS) 
         get_filename_component(TEST_SOURCE_NAME "${TEST_SOURCE}" NAME_WE)
-        set(TEST_NAME "${TEST_SOURCE_NAME}_test")
+        set(TEST_NAME "${TEST_SOURCE_NAME}")
 
         create_target_test(${TEST_NAME} ${TEST_SOURCE})
     endforeach()

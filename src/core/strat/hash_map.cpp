@@ -37,13 +37,20 @@ struct HashMap {
             }
             alloc_traits_t::deallocate(allocator, slots, cap);
             state_alloc_traits_t::deallocate(state_allocator, states, cap);
+            slots = nullptr;
+            states = nullptr;
         }
+        len = 0;
+        cap = 0;
+        deleted_count = 0;
     }
-    [[nodiscard]] auto clone() noexcept -> HashMap {
+    [[nodiscard]] auto clone() const noexcept -> HashMap {
         if (cap == 0) return HashMap::make();
 
-        slot_t *new_slots = alloc_traits_t::allocate(allocator, cap);
-        SlotState *new_states = state_alloc_traits_t::allocate(state_allocator, cap);
+        Alloc new_allocator = Alloc(allocator);
+        state_alloc_t new_state_allocator = state_alloc_t(state_allocator);
+        slot_t *new_slots = alloc_traits_t::allocate(new_allocator, cap);
+        SlotState *new_states = state_alloc_traits_t::allocate(new_state_allocator, cap);
 
         std::memcpy(new_states, states, cap * sizeof(SlotState));
         for (size_t i = 0; i < cap; ++i) {
@@ -55,8 +62,8 @@ struct HashMap {
                        .len = len,
                        .cap = cap,
                        .deleted_count = deleted_count,
-                       .allocator = allocator,
-                       .state_allocator = state_allocator};
+                       .allocator = new_allocator,
+                       .state_allocator = new_state_allocator};
     }
 
     auto rehash(size_t new_cap) noexcept {
@@ -93,7 +100,7 @@ struct HashMap {
     }
 
     auto add(const K &key, const V &value) noexcept {
-        if ((len + deleted_count) * 10 >= cap * 7) { rehash(cap == 0 ? 8 : cap * 2); }
+        if ((len + deleted_count) * 10 >= cap * 7) { rehash(cap < 8 ? 8 : cap * 2); }
 
         constexpr size_t EMPTY_DELETED_I = static_cast<size_t>(-1);
         size_t hash = Hash{}(key);

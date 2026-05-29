@@ -51,20 +51,21 @@ struct SlotMap {
             size_alloc_traits_t::deallocate(size_alloc, data, cap);
         }
     }
-    [[nodiscard]] auto clone() noexcept -> SlotMap {
+    [[nodiscard]] auto clone() const noexcept -> SlotMap {
         if (cap == 0) return SlotMap::make();
 
-        auto slot_alloc = slots.allocator;
+        auto new_slots = slots.clone();
+        auto new_slot_alloc = new_slots.allocator;
 
         using T_alloc_t = typename std::allocator_traits<slot_allocator_t>::template rebind_alloc<T>;
         using T_alloc_traits_t = std::allocator_traits<T_alloc_t>;
-        T_alloc_t t_alloc{slot_alloc};
+        T_alloc_t t_alloc{new_slot_alloc};
         T *new_data = T_alloc_traits_t::allocate(t_alloc, cap);
         std::memcpy(new_data, data, cap * sizeof(T));
 
         using size_alloc_t = typename std::allocator_traits<slot_allocator_t>::template rebind_alloc<T>;
         using size_alloc_traits_t = std::allocator_traits<size_alloc_t>;
-        size_alloc_t size_alloc{slot_alloc};
+        size_alloc_t size_alloc{new_slot_alloc};
         size_t *new_slot_indexes = size_alloc_traits_t::allocate(size_alloc, cap);
         std::memcpy(new_slot_indexes, slot_indexes, cap * sizeof(size_t));
 
@@ -72,7 +73,7 @@ struct SlotMap {
                        .slot_indexes = new_slot_indexes,
                        .len = len,
                        .cap = cap,
-                       .slots = slots.clone(),
+                       .slots = std::move(new_slots),
                        .next_slot_index = next_slot_index};
     }
 
@@ -232,7 +233,7 @@ private:
 
     auto handle_append_data(const T &val, size_t slot_index) noexcept {
         if (len + 1 > cap) {
-            size_t new_cap = cap == 0 ? 4 : cap + (cap / 2);
+            size_t new_cap = cap < 4 ? 4 : cap + (cap / 2);
             handle_reserve_data(new_cap);
         }
 

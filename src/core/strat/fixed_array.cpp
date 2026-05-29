@@ -25,21 +25,23 @@ export template <typename T, typename Alloc = std::allocator<T>> struct FixedArr
     auto destroy() noexcept {
         if (data) alloc_traits_t::deallocate(allocator, data, len);
     }
-    [[nodiscard]] auto clone() noexcept -> FixedArray {
-        T *new_data = alloc_traits_t::allocate(allocator, len);
-        return FixedArray{.data = new_data, .len = len};
+    [[nodiscard]] auto clone() const noexcept -> FixedArray {
+        Alloc new_allocator = Alloc(allocator);
+        T *new_data = alloc_traits_t::allocate(new_allocator, len);
+        std::memcpy(new_data, data, len * sizeof(T));
+        return FixedArray{.data = new_data, .len = len, .allocator = new_allocator};
     }
 
-    [[nodiscard]] auto remake(size_t new_len) noexcept {
-        if (new_len <= len) {
-            len = new_len;
-            std::memset(data, 0, new_len * sizeof(T));
-            return;
-        }
+    auto remake(size_t new_len) noexcept -> void {
+        size_t copy_len = new_len < len ? new_len : len;
+        T *new_data = alloc_traits_t::allocate(allocator, new_len);
+        std::memcpy(new_data, data, copy_len * sizeof(T));
+
+        if (new_len > len) { std::memset(new_data + len, 0, (new_len - len) * sizeof(T)); }
 
         if (data) alloc_traits_t::deallocate(allocator, data, len);
-        data = alloc_traits_t::allocate(allocator, new_len);
-        std::memset(data, 0, len * sizeof(T));
+
+        data = new_data;
         len = new_len;
     }
 
