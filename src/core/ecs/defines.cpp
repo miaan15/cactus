@@ -13,7 +13,7 @@ export using Entity = SlotMapKey;
 
 export using Signature = std::bitset<MAX_WORLD_COMPONENTS_COUNT>;
 export struct SignatureHasher {
-    auto operator()(const Signature &s) const -> size_t { return static_cast<size_t>(s.to_ullong()); }
+    auto operator()(const Signature &s) const noexcept -> size_t { return static_cast<size_t>(s.to_ullong()); }
 };
 
 export struct ComponentData {

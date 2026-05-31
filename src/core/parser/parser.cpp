@@ -1,10 +1,9 @@
 module;
 
-#include <cassert>
-
 export module cactus.core.parser;
 
 import cactus.common;
+import cactus.core.strat;
 
 namespace cactus {
 
@@ -13,9 +12,7 @@ export enum TokenType : int { IDENTIFIER = 256, NUMBER, STRING };
 export struct Token {
     TokenType type;
     size_t len;
-};
 
-export struct ParserLocation {
     size_t index = 0;
     size_t column = 1;
     size_t line = 1;
@@ -29,22 +26,34 @@ export struct Parser {
         size_t parent_len;
     };
 
-    std::vector<std::pair<ParserLocation, Token>> tokens;
+    DynamicArray<Token> tokens;
 
-    std::vector<data_t> data;
-    std::vector<char> string_data;
-    std::vector<IdentifierData> identifier_data_list;
-    std::flat_map<std::string, size_t> identifier_to_id_map;
+    DynamicArray<data_t> data;
+    DynamicArray<char> string_data;
+    DynamicArray<IdentifierData> identifier_data_list;
+    HashMap<std::string, size_t> identifier_to_id_map;
+    // TODO: futher optimize by make a buffer to store all identifier's name since it should be all mostly static
 
     size_t next_identifier_id = 0;
     size_t next_string_data_index = 0;
 
-    explicit Parser() = default;
-    ~Parser() = default;
-    Parser(const Parser &other) = delete;
-    Parser &operator=(const Parser &other) = delete;
-    Parser(Parser &&other) noexcept = default;
-    Parser &operator=(Parser &&other) noexcept = default;
+    [[nodiscard]] static auto make() noexcept -> Parser {
+        return Parser{.tokens = DynamicArray<Token>::make(),
+                      .data = DynamicArray<data_t>::make(),
+                      .string_data = DynamicArray<char>::make(),
+                      .identifier_data_list = DynamicArray<IdentifierData>::make(),
+                      .identifier_to_id_map = HashMap<std::string, size_t>::make(),
+                      .next_identifier_id = 0,
+                      .next_string_data_index = 0};
+    }
+    auto destroy() {
+        tokens.destroy();
+        data.destroy();
+        string_data.destroy();
+        identifier_data_list.destroy();
+        identifier_to_id_map.destroy();
+    }
+    [[nodiscard]] auto clone() = delete; // FIXME
 
     auto parse(const stdf::path &dir) {
         std::string content = get_and_preprocess_file(dir).value(); // TODO error
@@ -53,78 +62,87 @@ export struct Parser {
         handle_lexer(content);
 
         for (auto p : tokens) {
-            std::println("index {} at {}:{} : token = {}; len = {} >> {}", p.first.index, p.first.line, p.first.column,
-                         (size_t)p.second.type, p.second.len, std::string_view(content.data() + p.first.index, p.second.len));
+            std::println("index {} at {}:{} : token = {}; len = {} >> {}", p.index, p.line, p.column, (size_t)p.type, p.len,
+                         std::string_view(content.data() + p.index, p.len));
         }
 
         std::stack<size_t> identifier_stack{};
-        short just_after_identifier = 0; // cheat flag by set = 2 then decrease 2 times
+        short just_after_identifier = 0;
         auto pop_identifier_stack = [&]() {
             if (identifier_stack.empty()) return;
 
-            const auto &old_identifier_data = identifier_data_list[identifier_stack.top()];
-            auto old_data_len = old_identifier_data.data_len;
-            auto old_parent_len = old_identifier_data.data_len;
+            _assert(identifier_stack.top() < identifier_data_list.len,
+                    "identifier_stack.top() should be store index to identifier_data_list which means is in bound.");
+            IdentifierData old_identifier_data = identifier_data_list.get(identifier_stack.top()).value();
+            size_t old_data_len = old_identifier_data.data_len;
+            size_t old_parent_len = old_identifier_data.parent_len;
 
             identifier_stack.pop();
 
             if (identifier_stack.empty()) return;
 
-            auto &identifier_data = identifier_data_list[identifier_stack.top()];
-            identifier_data.data_len += old_data_len;
-            identifier_data.parent_len += old_parent_len;
+            _assert(identifier_stack.top() < identifier_data_list.len,
+                    "identifier_stack.top() should be store index to identifier_data_list which means is in bound.");
+            IdentifierData *identifier_data = identifier_data_list.get_ptr(identifier_stack.top());
+            identifier_data->data_len += old_data_len;
+            identifier_data->parent_len += old_parent_len;
         };
-        for (auto &[location, token] : tokens) {
+        for (auto token : tokens) {
             switch ((int)token.type) {
             case TokenType::IDENTIFIER: {
-                std::string str = content.substr(location.index, token.len);
-                identifier_to_id_map[std::move(str)] = next_identifier_id;
-                identifier_data_list.push_back({.point_to = data.size(), .data_len = 0, .parent_len = 1});
+                std::string str = content.substr(token.index, token.len);
+                identifier_to_id_map.add(std::move(str), next_identifier_id);
+                identifier_data_list.append({.point_to = data.len, .data_len = 0, .parent_len = 1});
 
                 identifier_stack.push(next_identifier_id);
 
                 ++next_identifier_id;
 
-                just_after_identifier = 2;
+                just_after_identifier = 2; // cheat flag by set = 2 then decrease 2 times (because I dont want to somehow exit
+                                           // this case without decrease this flag value)
             } break;
             case TokenType::NUMBER: {
-                std::string_view strv(content.data() + location.index, token.len);
+                std::string_view strv(content.data() + token.index, token.len);
 
                 int i_val;
                 auto res_i = std::from_chars(strv.data(), strv.data() + strv.size(), i_val);
 
                 if (res_i.ptr == strv.data() + strv.size()) {
-                    data.push_back(i_val);
+                    data.append(i_val);
                 } else {
                     float f_val;
                     auto res_f = std::from_chars(strv.data(), strv.data() + strv.size(), f_val);
 
                     if (res_f.ptr == strv.data() + strv.size()) {
-                        data.push_back(f_val);
+                        data.append(f_val);
                     } else {
-                        std::println("{}:{}: parse number failed, got {}", location.line, location.column, strv);
-                        assert(false);
+                        std::println("{}:{}: parse number failed, got {}", token.line, token.column, strv);
+                        _assert(false, "failed on parsing number");
                         return;
                         // TODO error
                     }
                 }
 
-                assert(!identifier_stack.empty());
-                ++identifier_data_list[identifier_stack.top()].data_len;
+                _assert(!identifier_stack.empty(), "identifier should not be empty yet");
+                _assert(identifier_stack.top() < identifier_data_list.len,
+                        "identifier_stack.top() should be store index to identifier_data_list which means is in bound.");
+                ++identifier_data_list.get_ptr(identifier_stack.top())->data_len;
                 if (just_after_identifier) pop_identifier_stack();
             } break;
             case TokenType::STRING: {
-                std::string_view strv(content.data() + location.index, token.len);
+                std::string_view strv(content.data() + token.index, token.len);
 
-                data.push_back((unsigned int)next_string_data_index);
+                data.append((unsigned int)next_string_data_index);
 
-                string_data.insert(string_data.end(), strv.begin(), strv.end());
-                string_data.push_back('\0');
+                for (char c : strv) string_data.append(c); // FIXME gotta do a range append to dynamic array
+                string_data.append('\0');
 
                 next_string_data_index += strv.size() + 1;
 
-                assert(!identifier_stack.empty());
-                ++identifier_data_list[identifier_stack.top()].data_len;
+                _assert(!identifier_stack.empty(), "identifier should not be empty yet");
+                _assert(identifier_stack.top() < identifier_data_list.len,
+                        "identifier_stack.top() should be store index to identifier_data_list which means is in bound.");
+                ++identifier_data_list.get_ptr(identifier_stack.top())->data_len;
                 if (just_after_identifier) pop_identifier_stack();
             } break;
             case '{': {
@@ -133,8 +151,8 @@ export struct Parser {
                 pop_identifier_stack();
             } break;
             default: {
-                std::println("{}:{}: not recorgnize symbol", location.line, location.column);
-                assert(false);
+                std::println("{}:{}: not recorgnize symbol", token.line, token.column);
+                _assert(false, "Not recorgnize symbol");
                 return;
                 // TODO error
             } break;
@@ -156,14 +174,15 @@ export struct Parser {
 
         std::println("identifier:");
         for (auto [name, id] : identifier_to_id_map) {
-            auto data = identifier_data_list[id];
+            _assert(id < identifier_data_list.len, "id should be store index to identifier_data_list which means is in bound.");
+            IdentifierData data = identifier_data_list.get(id).value();
             std::println("{}: point_to: {}; data_len: {}; parent_len: {}", name, data.point_to, data.data_len, data.parent_len);
         }
         std::println();
     }
 
 private:
-    auto get_and_preprocess_file(const stdf::path &dir) -> std::optional<std::string> {
+    auto get_and_preprocess_file(const stdf::path &dir) noexcept -> std::optional<std::string> {
         stdf::path full_dir = _root_dir / dir;
 
         std::error_code ec;
@@ -188,7 +207,7 @@ private:
         return content;
     }
 
-    auto handle_lexer(std::string_view content_view) -> bool { // TODO error handle
+    auto handle_lexer(std::string_view content_view) noexcept -> bool { // TODO error handle
         enum struct ReadState {
             EXPECT_IDENTIFIER,
             EXPECT_VALUE_OR_ARR,
@@ -199,32 +218,52 @@ private:
             AFTER_ARRAY_END,
         } state = ReadState::EXPECT_IDENTIFIER;
 
-        ParserLocation cur_location;
+        Token cur_token;
 
-        auto advance_location_horizontal = [&](size_t v) {
-            cur_location.index += v;
-            cur_location.column += v;
+        auto advance_location_horizontal = [&](size_t v) noexcept {
+            cur_token.index += v;
+            cur_token.column += v;
             content_view.remove_prefix(v);
         };
+        auto append_token = [&](TokenType type, size_t len) noexcept {
+            cur_token.type = type;
+            cur_token.len = len;
+            tokens.append(cur_token);
+        };
+
+        auto get_identifier_len = [&](const std::string_view &trimmed_content_view) noexcept -> size_t {
+            size_t len = 0;
+            for (auto c : trimmed_content_view) {
+                if (std::isalnum((unsigned char)c) || c == '_')
+                    ++len;
+                else
+                    break;
+            }
+
+            return len;
+        };
+
+        auto might_be_value = [&](char c) noexcept -> bool { return std::isdigit(c) || c == '-' || c == '\"'; };
+
         while (true) {
             bool line_breaked = false;
             if (content_view.empty()) break;
             if (content_view.front() == '\n' || content_view.front() == '\t' || content_view.front() == ' ') {
-                handle_remove_spaces(&content_view, &cur_location, &line_breaked);
+                handle_remove_spaces(&content_view, &cur_token, &line_breaked);
                 if (content_view.empty()) break;
             }
 
             switch (state) {
             case ReadState::EXPECT_IDENTIFIER: {
                 if (might_be_value(content_view.front())) {
-                    std::println("{}:{} expect identifier got {}", cur_location.line, cur_location.column,
+                    std::println("{}:{} expect identifier got {}", cur_token.line, cur_token.column,
                                  content_view.substr(0, content_view.find_first_not_of(" \n\t")));
-                    assert(false);
+                    _assert(false, "Excepting identifier but not");
                     return false; // TODO error
                 }
 
                 size_t len = get_identifier_len(content_view);
-                tokens.push_back({cur_location, Token{.type = TokenType::IDENTIFIER, .len = len}});
+                append_token(TokenType::IDENTIFIER, len);
                 advance_location_horizontal(len);
 
                 state = ReadState::AFTER_IDENTIFIER;
@@ -233,7 +272,7 @@ private:
             case ReadState::EXPECT_VALUE_OR_ARR: {
                 switch (content_view.front()) {
                 case '{': {
-                    tokens.push_back({cur_location, Token{.type = (TokenType)content_view.front(), .len = 1}});
+                    append_token((TokenType)content_view.front(), 1);
                     advance_location_horizontal(1);
 
                     state = ReadState::AFTER_ARRAY_BEGIN;
@@ -242,8 +281,7 @@ private:
                     advance_location_horizontal(1);
 
                     size_t end_string_i = content_view.find_first_of("\"");
-                    if (end_string_i != 0)
-                        tokens.push_back({cur_location, Token{.type = TokenType::STRING, .len = end_string_i}});
+                    if (end_string_i != 0) append_token(TokenType::STRING, end_string_i);
 
                     advance_location_horizontal(end_string_i + 1);
 
@@ -252,13 +290,13 @@ private:
                 default: {
                     if (might_be_value(content_view.front())) {
                         size_t num_len = content_view.find_first_of(" \t\n,}");
-                        tokens.push_back({cur_location, Token{.type = TokenType::NUMBER, .len = num_len}});
+                        append_token(TokenType::NUMBER, num_len);
                         advance_location_horizontal(num_len);
                     } else {
-                        std::println("{}:{} expect value got {}", cur_location.line, cur_location.column,
+                        std::println("{}:{} expect value got {}", cur_token.line, cur_token.column,
                                      content_view.substr(0, content_view.find_first_not_of(" \n\t")));
 
-                        assert(false);
+                        _assert(false, "Expecting value but not");
                         return false; // TODO error
                     }
 
@@ -269,17 +307,15 @@ private:
 
             case ReadState::AFTER_IDENTIFIER: {
                 if (content_view.front() != '=' && content_view.front() != '{') {
-                    std::println("{}:{} expect {{ or = got {}", cur_location.line, cur_location.column,
+                    std::println("{}:{} expect {{ or = got {}", cur_token.line, cur_token.column,
                                  content_view.substr(0, content_view.find_first_not_of(" \n\t")));
 
-                    assert(false);
+                    _assert(false, "Expecting { but not");
                     return false; // TODO error
                 }
 
                 // the "{" will be handle later
-                if (content_view.front() == '=') {
-                    advance_location_horizontal(1);
-                }
+                if (content_view.front() == '=') { advance_location_horizontal(1); }
 
                 state = ReadState::EXPECT_VALUE_OR_ARR;
             } break;
@@ -292,7 +328,7 @@ private:
                     state = ReadState::AFTER_SEPARATOR;
                     break;
                 case '}':
-                    tokens.push_back({cur_location, Token{.type = (TokenType)content_view.front(), .len = 1}});
+                    append_token((TokenType)content_view.front(), 1);
                     advance_location_horizontal(1);
 
                     state = ReadState::AFTER_ARRAY_END;
@@ -338,45 +374,30 @@ private:
         return true;
     }
 
-    auto handle_remove_spaces(std::string_view *content_view, ParserLocation *location, bool *line_breaked) -> void {
+    auto handle_remove_spaces(std::string_view *content_view, Token *token, bool *line_breaked) noexcept -> void {
         constexpr size_t TAB_WIDTH = 4;
 
         size_t removed = 0;
         for (auto c : *content_view) {
             if (c == '\n') {
-                ++location->line;
-                location->column = 1;
+                ++token->line;
+                token->column = 1;
                 *line_breaked = true;
             } else if (c == '\t') {
-                location->column += TAB_WIDTH - ((location->column - 1) % TAB_WIDTH);
+                token->column += TAB_WIDTH - ((token->column - 1) % TAB_WIDTH);
             } else if (c == ' ') {
-                ++location->column;
+                ++token->column;
             } else {
                 break;
             }
 
-            ++location->index;
+            ++token->index;
 
             ++removed;
         }
 
         content_view->remove_prefix(removed);
     }
-
-    auto get_identifier_len(const std::string_view &trimmed_content_view) -> size_t {
-        size_t len = 0;
-        for (auto c : trimmed_content_view) {
-            if (std::isalnum((unsigned char)c) || c == '_') {
-                ++len;
-            } else {
-                break;
-            }
-        }
-
-        return len;
-    }
-
-    auto might_be_value(char c) -> bool { return std::isdigit(c) || c == '-' || c == '\"'; }
 };
 
 } // namespace cactus

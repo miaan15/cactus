@@ -4,11 +4,12 @@ export module cactus.core.strat:dynamic_array;
 
 import std;
 import :assert;
-
 using size_t = std::size_t;
+
 
 namespace cactus {
 
+// TODO: append with range
 export template <typename T, typename Alloc = std::allocator<T>>
     requires std::is_trivially_copyable_v<T>
 struct DynamicArray {

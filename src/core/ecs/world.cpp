@@ -31,7 +31,7 @@ struct World {
     HashMap<Signature, size_t, SignatureHasher> signature_to_table_index_map;
     DynamicArray<Table> tables;
 
-    [[nodiscard]] static auto make() -> World {
+    [[nodiscard]] static auto make() noexcept -> World {
         size_t component_count = component_utils_t::count();
         auto component_data_list = FixedArray<ComponentData>::make(component_count);
 
@@ -56,15 +56,15 @@ struct World {
     }
     [[nodiscard]] auto clone() = delete; // FIXME
 
-    [[nodiscard]] auto new_entity() -> Entity { return entities_data.add(EntityData{Signature{}, 0}); }
+    [[nodiscard]] auto new_entity() noexcept -> Entity { return entities_data.add(EntityData{Signature{}, 0}); }
 
-    [[nodiscard]] auto has_entity(Entity entity) -> bool { return entities_data.has(entity); }
+    [[nodiscard]] auto has_entity(Entity entity) noexcept -> bool { return entities_data.has(entity); }
 
-    [[nodiscard]] auto get_entity_signature(Entity entity) -> std::optional<Signature> {
+    [[nodiscard]] auto get_entity_signature(Entity entity) noexcept -> std::optional<Signature> {
         return entities_data.get(entity).transform([](auto data) { return data.signature; });
     }
 
-    [[nodiscard]] auto get_component_ptr(Entity entity, size_t component_index) -> void * {
+    [[nodiscard]] auto get_component_ptr(Entity entity, size_t component_index) noexcept -> void * {
         if (component_index >= component_count) return nullptr; // component out of bound
         auto entity_data_opt = entities_data.get(entity);
         if (!entity_data_opt.has_value()) return nullptr; // if entity not existed
@@ -81,7 +81,7 @@ struct World {
 
         return tables.get_ptr(table_index)->get_component_ptr(entity_data.table_row_index, component_index);
     }
-    [[nodiscard]] auto get_component_ptr(Entity entity, size_t component_index) const -> const void * {
+    [[nodiscard]] auto get_component_ptr(Entity entity, size_t component_index) const noexcept -> const void * {
         if (component_index >= component_count) return nullptr; // component out of bound
         auto entity_data_opt = entities_data.get(entity);
         if (!entity_data_opt.has_value()) return nullptr; // if entity not existed
@@ -99,7 +99,7 @@ struct World {
         return tables.get_ptr(table_index)->get_component_ptr(entity_data.table_row_index, component_index);
     }
 
-    [[nodiscard]] auto has_component(Entity entity, size_t component_index) const -> bool {
+    [[nodiscard]] auto has_component(Entity entity, size_t component_index) const noexcept -> bool {
         if (component_index >= component_count) return false; // component out of bound
         auto entity_data_opt = entities_data.get(entity);
         if (!entity_data_opt.has_value()) return false;
@@ -112,7 +112,7 @@ struct World {
         return signature.test(component_index);
     }
 
-    auto add_component(Entity entity, size_t component_index) -> void * {
+    auto add_component(Entity entity, size_t component_index) noexcept -> void * {
         if (component_index >= component_count) return nullptr; // component out of bound
         auto entity_data_opt = entities_data.get(entity);
         if (!entity_data_opt.has_value()) return nullptr; // if entity not existed
@@ -175,7 +175,7 @@ struct World {
         Table *new_table = tables.get_ptr(new_table_index);
         return new_table->get_component_ptr(new_table->len - 1, component_index);
     }
-    auto add_component(Entity entity, std::initializer_list<size_t> component_index_list) -> void {
+    auto add_component(Entity entity, std::initializer_list<size_t> component_index_list) noexcept -> void {
         auto entity_data_opt = entities_data.get(entity);
         if (!entity_data_opt.has_value()) return; // if entity not existed
         EntityData entity_data = entity_data_opt.value();
@@ -235,7 +235,7 @@ struct World {
         }
     }
 
-    auto remove_component(Entity entity, size_t component_index) -> bool {
+    auto remove_component(Entity entity, size_t component_index) noexcept -> bool {
         if (component_index >= component_count) return false; // component out of bound
         auto entity_data_opt = entities_data.get(entity);
         if (!entity_data_opt.has_value()) return false; // if entity not existed
@@ -306,7 +306,7 @@ struct World {
 
         return true;
     }
-    auto remove_component(Entity entity, std::initializer_list<size_t> component_index_list) -> void {
+    auto remove_component(Entity entity, std::initializer_list<size_t> component_index_list) noexcept -> void {
         auto entity_data_opt = entities_data.get(entity);
         if (!entity_data_opt.has_value()) return; // if entity not existed
         EntityData entity_data = entity_data_opt.value();
@@ -376,7 +376,7 @@ struct World {
 
     template <typename T>
         requires(component_utils_t::template has<T>())
-    [[nodiscard]] auto get_component(Entity entity) const -> std::optional<T> {
+    [[nodiscard]] auto get_component(Entity entity) const noexcept -> std::optional<T> {
         const void *ptr = get_component_ptr(entity, component_utils_t::template get_index<T>());
         if (ptr == nullptr) return {};
         return *(T *)ptr;
@@ -384,47 +384,47 @@ struct World {
 
     template <typename T>
         requires(component_utils_t::template has<T>())
-    [[nodiscard]] auto get_component_ptr(Entity entity) -> T * {
+    [[nodiscard]] auto get_component_ptr(Entity entity) noexcept -> T * {
         return (T *)get_component_ptr(entity, component_utils_t::template get_index<T>());
     }
     template <typename T>
         requires(component_utils_t::template has<T>())
-    [[nodiscard]] auto get_component_ptr(Entity entity) const -> const T * {
+    [[nodiscard]] auto get_component_ptr(Entity entity) const noexcept -> const T * {
         return (const T *)get_component_ptr(entity, component_utils_t::template get_index<T>());
     }
 
     template <typename T>
         requires(component_utils_t::template has<T>())
-    [[nodiscard]] auto has_component(Entity entity) const -> bool {
+    [[nodiscard]] auto has_component(Entity entity) const noexcept -> bool {
         return has_component(entity, component_utils_t::template get_index<T>());
     }
 
     template <typename T>
         requires(component_utils_t::template has<T>())
-    auto add_component(Entity entity) -> T * {
+    auto add_component(Entity entity) noexcept -> T * {
         return (T *)add_component(entity, component_utils_t::template get_index<T>());
     }
     template <typename... Us>
         requires(sizeof...(Us) > 1 && (component_utils_t::template has<Us>() && ...))
-    auto add_component(Entity entity) -> void {
+    auto add_component(Entity entity) noexcept -> void {
         add_component(entity, {component_utils_t::template get_index<Us>()...});
     }
 
     template <typename T>
         requires(component_utils_t::template has<T>())
-    auto remove_component(Entity entity) -> bool {
+    auto remove_component(Entity entity) noexcept -> bool {
         return remove_component(entity, component_utils_t::template get_index<T>());
     }
     template <typename... Us>
         requires(sizeof...(Us) > 1 && (component_utils_t::template has<Us>() && ...))
-    auto remove_component(Entity entity) -> void {
+    auto remove_component(Entity entity) noexcept -> void {
         remove_component(entity, {component_utils_t::template get_index<Us>()...});
     }
 
-    [[nodiscard]] auto query_builder() -> WorldQueryBuilder<Ts...> { return WorldQueryBuilder<Ts...>(this); }
+    [[nodiscard]] auto query_builder() noexcept -> WorldQueryBuilder<Ts...> { return WorldQueryBuilder<Ts...>(this); }
 
 private:
-    auto new_table(Signature signature) -> size_t {
+    auto new_table(Signature signature) noexcept -> size_t {
         _assert(!signature_to_table_index_map.has(signature), "Signature should not already existed");
 
         tables.append(Table::make(signature, component_data_list));

@@ -20,7 +20,7 @@ export struct Table {
 
     FixedArray<size_t> component_offset_list;
 
-    [[nodiscard]] static auto make(Signature signature, const FixedArray<ComponentData> &component_data_list) -> Table {
+    [[nodiscard]] static auto make(Signature signature, const FixedArray<ComponentData> &component_data_list) noexcept -> Table {
         size_t offset = 0;
         size_t max_align = 1;
 
@@ -53,26 +53,26 @@ export struct Table {
         if (owner_list_raw) std::free(owner_list_raw);
         component_offset_list.destroy();
     }
-    [[nodiscard]] auto clone() -> Table = delete; // TODO
+    [[nodiscard]] auto clone() noexcept -> Table = delete; // TODO
 
-    [[nodiscard]] auto get_row_ptr(size_t row_index) const -> const void * {
+    [[nodiscard]] auto get_row_ptr(size_t row_index) const noexcept -> const void * {
         _assert(row_index < len, "Row index out of bounds");
         return table_raw + row_index * row_size;
     }
-    [[nodiscard]] auto get_row_ptr(size_t row_index) -> void * {
+    [[nodiscard]] auto get_row_ptr(size_t row_index) noexcept -> void * {
         _assert(row_index < len, "Row index out of bounds");
         return table_raw + row_index * row_size;
     }
 
-    [[nodiscard]] auto get_component_offset(size_t component_index) const -> size_t {
+    [[nodiscard]] auto get_component_offset(size_t component_index) const noexcept -> size_t {
         _assert(component_index < component_offset_list.len, "Component index out of bounds");
         return component_offset_list.get(component_index).value();
     }
 
-    [[nodiscard]] auto get_component_ptr(size_t row_index, size_t component_index) const -> const void * {
+    [[nodiscard]] auto get_component_ptr(size_t row_index, size_t component_index) const noexcept -> const void * {
         return (const char *)get_row_ptr(row_index) + get_component_offset(component_index);
     }
-    [[nodiscard]] auto get_component_ptr(size_t row_index, size_t component_index) -> void * {
+    [[nodiscard]] auto get_component_ptr(size_t row_index, size_t component_index) noexcept -> void * {
         return (char *)get_row_ptr(row_index) + get_component_offset(component_index);
     }
 
@@ -90,7 +90,7 @@ export struct Table {
         cap = new_cap;
     }
 
-    auto new_row(Entity entity_owner) -> size_t {
+    auto new_row(Entity entity_owner) noexcept -> size_t {
         if (len >= cap) {
             size_t new_cap = cap < 4 ? 4 : cap + (cap / 2);
             reserve(new_cap);
@@ -107,7 +107,7 @@ export struct Table {
     }
 
     // NOTE: this return the entity owner of the last row if it require to be moved by this
-    auto remove_row(size_t index) -> std::optional<Entity> {
+    auto remove_row(size_t index) noexcept -> std::optional<Entity> {
         if (index >= len) return {};
 
         if (index != len - 1) {
