@@ -33,6 +33,9 @@ option(BUILD_LIB "Build as library" OFF)
 # Lib type
 option(BUILD_SHARED_LIBS "Build as shared/dynamic library" OFF)
 
+# Demo
+option(CACTUS_BUILD_DEMOS "Build the demos" OFF)
+
 # Test
 option(CACTUS_BUILD_TESTS "Build the unit tests" OFF)
 
@@ -75,7 +78,6 @@ set(DEMO_DIR ${CMAKE_SOURCE_DIR}/demo)
 set(TEST_DIR ${CMAKE_SOURCE_DIR}/test)
 set(INC_DIRS
     ${VENDOR_DIR}/eabase/include/Common
-    ${VENDOR_DIR}/eastl/include
     ${VENDOR_DIR}/raylib/src
     ${VENDOR_DIR}/spdlog/include
 )
@@ -100,19 +102,18 @@ set(MODULE_FILES
     ${SRCS}
     ${SRC_MODULES}
     ${MODULE_DIR}/std/std.cppm
-    ${MODULE_DIR}/eastl/eastl.cppm
     ${MODULE_DIR}/raylib/raylib.cppm
     ${VENDOR_DIR}/glm/glm/glm.cppm
     ${MODULE_DIR}/spdlog/spdlog.cppm
 )
 set(LIBS
-    EASTL
+    raylib
 )
 
 # ---------------------------------------------------------
 # Libs subdirectory
 # ---------------------------------------------------------
-add_subdirectory(${VENDOR_DIR}/eastl)
+add_subdirectory(${VENDOR_DIR}/raylib)
 
 # ---------------------------------------------------------
 # To lib
@@ -126,6 +127,41 @@ if(BUILD_LIB)
 
     target_include_directories(cactus PUBLIC ${INC_DIRS})
     target_link_libraries(cactus PUBLIC ${LIBS})
+endif()
+
+# ---------------------------------------------------------
+# Demo
+# ---------------------------------------------------------
+if(CACTUS_BUILD_DEMOS)
+    function(create_target_demo DEMO_NAME DEMO_SRC_DIR)
+        add_executable(${DEMO_NAME} "${DEMO_SRC_DIR}/main.cpp")
+
+        file(GLOB_RECURSE DEMO_SRCS CONFIGURE_DEPENDS "${DEMO_SRC_DIR}/*.cpp")
+        list(REMOVE_ITEM DEMO_SRCS "${DEMO_SRC_DIR}/main.cpp")
+
+        set_target_properties(${DEMO_NAME} PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/demo"
+        )
+
+        target_sources(${DEMO_NAME} PRIVATE 
+            FILE_SET CXX_MODULES FILES ${MODULE_FILES} ${DEMO_SRCS}
+        )
+
+        target_include_directories(${DEMO_NAME} PRIVATE 
+            ${INC_DIRS}
+        )
+        target_link_libraries(${DEMO_NAME} PRIVATE ${LIBS})
+    endfunction()
+
+    file(GLOB_RECURSE DEMO_MAIN_SRCS CONFIGURE_DEPENDS "${DEMO_DIR}/*main.cpp")
+
+    foreach(DEMO_MAIN_SRC IN LISTS DEMO_MAIN_SRCS) 
+        get_filename_component(DEMO_SRC_DIR "${DEMO_MAIN_SRC}" DIRECTORY)
+        get_filename_component(PARENT_DIR "${DEMO_SRC_DIR}" DIRECTORY)
+        get_filename_component(DEMO_NAME "${PARENT_DIR}" NAME)
+
+        create_target_demo(${DEMO_NAME} ${DEMO_SRC_DIR})
+    endforeach()
 endif()
 
 # ---------------------------------------------------------

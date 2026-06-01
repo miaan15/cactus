@@ -6,7 +6,6 @@ mkdir -p ./vendor
 cd ./vendor
 
 # Use:
-# - eastl
 # - raylib
 # - glm
 # - spdlog
@@ -14,20 +13,6 @@ cd ./vendor
 # - doctest
 
 mkdir -p .
-
-if [ ! -d "./eabase" ]; then
-    mkdir eabase
-    (
-        cd eabase
-        git init
-        git remote add origin https://github.com/electronicarts/EABase.git
-        git fetch --depth 1 origin 0699a15efdfd20b6cecf02153bfa5663decb653c
-        git checkout FETCH_HEAD
-    )
-fi
-if [ ! -d "./eastl" ]; then
-    git clone --depth 1 --branch 3.27.01 https://github.com/electronicarts/EASTL.git ./eastl
-fi
 
 if [ ! -d "./raylib" ]; then
     git clone --depth 1 --branch 6.0 https://github.com/raysan5/raylib.git ./raylib
