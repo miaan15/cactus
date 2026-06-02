@@ -5,7 +5,7 @@ using namespace cactus;
 
 int main() {
 
-    Parser a = Parser::make();
+    SpinesDocument a = SpinesDocument::make();
     a.parse("test/core/idk.bundle");
     a.destroy();
 }

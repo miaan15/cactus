@@ -1,6 +1,6 @@
 module;
 
-export module cactus.core.parser;
+export module cactus.core.spines:document;
 
 import cactus.common;
 import cactus.core.strat;
@@ -18,7 +18,7 @@ export struct Token {
     size_t line = 1;
 };
 
-export struct Parser {
+export struct SpinesDocument {
     using data_t = std::variant<int, float, unsigned int>;
     struct IdentifierData {
         size_t point_to;
@@ -37,14 +37,14 @@ export struct Parser {
     size_t next_identifier_id = 0;
     size_t next_string_data_index = 0;
 
-    [[nodiscard]] static auto make() noexcept -> Parser {
-        return Parser{.tokens = DynamicArray<Token>::make(),
-                      .data = DynamicArray<data_t>::make(),
-                      .string_data = DynamicArray<char>::make(),
-                      .identifier_data_list = DynamicArray<IdentifierData>::make(),
-                      .identifier_to_id_map = HashMap<std::string, size_t>::make(),
-                      .next_identifier_id = 0,
-                      .next_string_data_index = 0};
+    [[nodiscard]] static auto make() noexcept -> SpinesDocument {
+        return SpinesDocument{.tokens = DynamicArray<Token>::make(),
+                              .data = DynamicArray<data_t>::make(),
+                              .string_data = DynamicArray<char>::make(),
+                              .identifier_data_list = DynamicArray<IdentifierData>::make(),
+                              .identifier_to_id_map = HashMap<std::string, size_t>::make(),
+                              .next_identifier_id = 0,
+                              .next_string_data_index = 0};
     }
     auto destroy() {
         tokens.destroy();
