@@ -18,6 +18,24 @@ export struct Token {
     size_t line = 1;
 };
 
+export struct SpinesDocumentParsingError {
+    enum struct Type {
+        NONE,
+        FILE_NOT_EXISTED,
+        FILE_PERMISSTION_DENIED,
+        FILE_IO_ERROR,
+        FILE_UNKNOWN_ERROR,
+        INVALID_IDENTIFIER_NAME,
+        INVALID_VALUE,
+        INVALID_SYNTAX,
+    } type = Type::NONE;
+
+    size_t index = 0;
+    size_t column = 1;
+    size_t line = 1;
+};
+using parsing_error_type_t = SpinesDocumentParsingError::Type;
+
 export struct SpinesDocument {
     using data_t = std::variant<int, float, unsigned int>;
     struct IdentifierNameView {
@@ -62,16 +80,13 @@ export struct SpinesDocument {
     }
     [[nodiscard]] auto clone() = delete; // FIXME
 
-    auto parse(const stdf::path &dir) {
-        spines_source = get_and_preprocess_file(dir).value(); // TODO error
-        std::println("string:\n{}\n", spines_source);
+    auto parse(const stdf::path &dir) -> SpinesDocumentParsingError {
+        auto spines_source_exp = get_and_preprocess_file(dir).transform_error(
+            [](SpinesDocumentParsingError::Type t) { return SpinesDocumentParsingError{.type = t}; });
+        if (!spines_source_exp.has_value()) return spines_source_exp.error();
+        spines_source = std::move(spines_source_exp.value());
 
         handle_lexer(spines_source);
-
-        for (auto p : tokens) {
-            std::println("index {} at {}:{} : token = {}; len = {} >> {}", p.index, p.line, p.column, (size_t)p.type, p.len,
-                         std::string_view(spines_source.data() + p.index, p.len));
-        }
 
         std::stack<size_t> identifier_stack{};
         short just_after_identifier = 0;
@@ -121,10 +136,10 @@ export struct SpinesDocument {
                     if (res_f.ptr == strv.data() + strv.size()) {
                         data.append(f_val);
                     } else {
-                        std::println("{}:{}: parse number failed, got {}", token.line, token.column, strv);
-                        _assert(false, "failed on parsing number");
-                        return;
-                        // TODO error
+                        return SpinesDocumentParsingError{.type = parsing_error_type_t::INVALID_VALUE,
+                                                          .index = token.index,
+                                                          .column = token.column,
+                                                          .line = token.line};
                     }
                 }
 
@@ -156,46 +171,45 @@ export struct SpinesDocument {
                 pop_identifier_stack();
             } break;
             default: {
-                std::println("{}:{}: not recorgnize symbol", token.line, token.column);
-                _assert(false, "Not recorgnize symbol");
-                return;
-                // TODO error
+                return SpinesDocumentParsingError{.type = parsing_error_type_t::INVALID_SYNTAX,
+                                                  .index = token.index,
+                                                  .column = token.column,
+                                                  .line = token.line};
+
             } break;
             }
 
             if (just_after_identifier) --just_after_identifier;
         }
 
-        std::println();
-        std::print("data:\t");
-        for (auto v : data) {
-            std::visit([](auto &&arg) { std::print("{} ", arg); }, v);
-        }
-        std::println();
-
-        std::print("str:\t");
-        for (auto v : string_data) { std::print("{} ", v == '\0' ? '~' : v); }
-        std::println();
-
-        std::println("identifier:");
-        for (auto data : identifier_data_list) {
-            std::println("{}: point_to: {}; data_len: {}; parent_len: {}",
-                         std::string_view(spines_source.data() + data.name.offset_root, data.name.len),
-                         data.owned_data.point_to, data.owned_data.data_len, data.owned_data.parent_len);
-        }
-        std::println();
+        return SpinesDocumentParsingError{};
     }
 
 private:
-    auto get_and_preprocess_file(const stdf::path &dir) noexcept -> std::optional<std::string> {
+    auto get_and_preprocess_file(const stdf::path &dir) noexcept
+        -> std::expected<std::string, SpinesDocumentParsingError::Type> {
         stdf::path full_dir = _root_dir / dir;
 
         std::error_code ec;
         auto size = stdf::file_size(full_dir, ec);
-        if (ec || size == 0) return {}; // TODO error handle
+        switch (ec.value()) {
+        case (int)std::errc::is_a_directory:
+        case (int)std::errc::no_such_file_or_directory:
+            return std::unexpected{parsing_error_type_t::FILE_NOT_EXISTED};
+            break;
+        case (int)std::errc::permission_denied:
+            return std::unexpected{parsing_error_type_t::FILE_PERMISSTION_DENIED};
+            break;
+        case (int)std::errc::io_error:
+            return std::unexpected{parsing_error_type_t::FILE_IO_ERROR};
+            break;
+        default:
+            return std::unexpected{parsing_error_type_t::FILE_UNKNOWN_ERROR};
+            break;
+        }
 
         std::ifstream file(full_dir, std::ios::in | std::ios::binary);
-        if (!file) return {}; // TODO error handle
+        if (!file) return std::unexpected{parsing_error_type_t::FILE_IO_ERROR};
 
         std::string content{};
         content.resize(size);
@@ -212,7 +226,7 @@ private:
         return content;
     }
 
-    auto handle_lexer(std::string_view content_view) noexcept -> bool { // TODO error handle
+    auto handle_lexer(std::string_view content_view) noexcept -> SpinesDocumentParsingError {
         enum struct ReadState {
             EXPECT_IDENTIFIER,
             EXPECT_VALUE_OR_ARR,
@@ -261,10 +275,10 @@ private:
             switch (state) {
             case ReadState::EXPECT_IDENTIFIER: {
                 if (might_be_value(content_view.front())) {
-                    std::println("{}:{} expect identifier got {}", cur_token.line, cur_token.column,
-                                 content_view.substr(0, content_view.find_first_not_of(" \n\t")));
-                    _assert(false, "Excepting identifier but not");
-                    return false; // TODO error
+                    return SpinesDocumentParsingError{.type = parsing_error_type_t::INVALID_IDENTIFIER_NAME,
+                                                      .index = cur_token.index,
+                                                      .column = cur_token.column,
+                                                      .line = cur_token.line};
                 }
 
                 size_t len = get_identifier_len(content_view);
@@ -298,11 +312,10 @@ private:
                         append_token(TokenType::NUMBER, num_len);
                         advance_location_horizontal(num_len);
                     } else {
-                        std::println("{}:{} expect value got {}", cur_token.line, cur_token.column,
-                                     content_view.substr(0, content_view.find_first_not_of(" \n\t")));
-
-                        _assert(false, "Expecting value but not");
-                        return false; // TODO error
+                        return SpinesDocumentParsingError{.type = parsing_error_type_t::INVALID_VALUE,
+                                                          .index = cur_token.index,
+                                                          .column = cur_token.column,
+                                                          .line = cur_token.line};
                     }
 
                     state = ReadState::AFTER_VALUE;
@@ -312,11 +325,10 @@ private:
 
             case ReadState::AFTER_IDENTIFIER: {
                 if (content_view.front() != '=' && content_view.front() != '{') {
-                    std::println("{}:{} expect {{ or = got {}", cur_token.line, cur_token.column,
-                                 content_view.substr(0, content_view.find_first_not_of(" \n\t")));
-
-                    _assert(false, "Expecting { but not");
-                    return false; // TODO error
+                    return SpinesDocumentParsingError{.type = parsing_error_type_t::INVALID_SYNTAX,
+                                                      .index = cur_token.index,
+                                                      .column = cur_token.column,
+                                                      .line = cur_token.line};
                 }
 
                 // the "{" will be handle later
@@ -376,7 +388,7 @@ private:
             }
         }
 
-        return true;
+        return SpinesDocumentParsingError{};
     }
 
     auto handle_remove_spaces(std::string_view *content_view, Token *token, bool *line_breaked) noexcept -> void {
@@ -433,7 +445,7 @@ public:
                 if (child_name == search_name) { return Accessor{doc_ref, i, {}}; }
             }
 
-            std::println("Error: Child identifier '{}' not found in this scope.", search_name);
+            // std::println("Error: Child identifier '{}' not found in this scope.", search_name);
             _assert(false, "Child identifier not found.");
             return *this;
         }
@@ -493,7 +505,7 @@ public:
             std::string_view name{spines_source.data() + data.name.offset_root, data.name.len};
             if (name == root_name) return Accessor{this, i, {}};
         }
-        std::println("Error: Root identifier '{}' not found.", root_name);
+        // std::println("Error: Root identifier '{}' not found.", root_name);
         _assert(false, "Root identifier not found.");
         return Accessor{this, 0, {}};
     }
