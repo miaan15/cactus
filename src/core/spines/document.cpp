@@ -38,18 +38,13 @@ using parsing_error_type_t = SpinesDocumentParsingError::Type;
 
 export struct SpinesDocument {
     using data_t = std::variant<int, float, unsigned int>;
-    struct IdentifierNameView {
-        size_t offset_root;
-        size_t len;
-    };
-    struct IdentifierOwnedData {
-        size_t point_to;
+    struct IdentifierData {
+        size_t name_offset_root;
+        size_t name_len;
+
+        size_t data_point_to_index;
         size_t data_len;
         size_t parent_len;
-    };
-    struct IdentifierData {
-        IdentifierNameView name;
-        IdentifierOwnedData owned_data;
     };
 
     std::string spines_source;
@@ -86,7 +81,10 @@ export struct SpinesDocument {
         if (!spines_source_exp.has_value()) return spines_source_exp.error();
         spines_source = std::move(spines_source_exp.value());
 
-        handle_lexer(spines_source);
+        auto lexer_err = handle_lexer(spines_source);
+        if (lexer_err.type != parsing_error_type_t::NONE) {
+            return lexer_err;
+        }
 
         std::stack<size_t> identifier_stack{};
         short just_after_identifier = 0;
@@ -95,7 +93,7 @@ export struct SpinesDocument {
 
             _assert(identifier_stack.top() < identifier_data_list.len,
                     "identifier_stack.top() should be store index to identifier_data_list which means is in bound.");
-            IdentifierOwnedData old_identifier_data = identifier_data_list.get(identifier_stack.top()).value().owned_data;
+            IdentifierData old_identifier_data = identifier_data_list.get(identifier_stack.top()).value();
             size_t old_data_len = old_identifier_data.data_len;
             size_t old_parent_len = old_identifier_data.parent_len;
 
@@ -105,7 +103,7 @@ export struct SpinesDocument {
 
             _assert(identifier_stack.top() < identifier_data_list.len,
                     "identifier_stack.top() should be store index to identifier_data_list which means is in bound.");
-            IdentifierOwnedData *identifier_data = &identifier_data_list.get_ptr(identifier_stack.top())->owned_data;
+            IdentifierData *identifier_data = identifier_data_list.get_ptr(identifier_stack.top());
             identifier_data->data_len += old_data_len;
             identifier_data->parent_len += old_parent_len;
         };
@@ -113,7 +111,11 @@ export struct SpinesDocument {
             switch ((int)token.type) {
             case TokenType::IDENTIFIER: {
                 identifier_data_list.append(IdentifierData{
-                    .name = {token.index, token.len}, .owned_data = {.point_to = data.len, .data_len = 0, .parent_len = 1}});
+                    .name_offset_root = token.index, 
+                    .name_len = token.len,
+                    .data_point_to_index = data.len, 
+                    .data_len = 0, 
+                    .parent_len = 1});
 
                 identifier_stack.push(next_identifier_id);
                 ++next_identifier_id;
@@ -146,7 +148,7 @@ export struct SpinesDocument {
                 _assert(!identifier_stack.empty(), "identifier should not be empty yet");
                 _assert(identifier_stack.top() < identifier_data_list.len,
                         "identifier_stack.top() should be store index to identifier_data_list which means is in bound.");
-                ++identifier_data_list.get_ptr(identifier_stack.top())->owned_data.data_len;
+                ++identifier_data_list.get_ptr(identifier_stack.top())->data_len;
                 if (just_after_identifier) pop_identifier_stack();
             } break;
             case TokenType::STRING: {
@@ -162,7 +164,7 @@ export struct SpinesDocument {
                 _assert(!identifier_stack.empty(), "identifier should not be empty yet");
                 _assert(identifier_stack.top() < identifier_data_list.len,
                         "identifier_stack.top() should be store index to identifier_data_list which means is in bound.");
-                ++identifier_data_list.get_ptr(identifier_stack.top())->owned_data.data_len;
+                ++identifier_data_list.get_ptr(identifier_stack.top())->data_len;
                 if (just_after_identifier) pop_identifier_stack();
             } break;
             case '{': {
@@ -192,20 +194,22 @@ private:
 
         std::error_code ec;
         auto size = stdf::file_size(full_dir, ec);
-        switch (ec.value()) {
-        case (int)std::errc::is_a_directory:
-        case (int)std::errc::no_such_file_or_directory:
-            return std::unexpected{parsing_error_type_t::FILE_NOT_EXISTED};
-            break;
-        case (int)std::errc::permission_denied:
-            return std::unexpected{parsing_error_type_t::FILE_PERMISSTION_DENIED};
-            break;
-        case (int)std::errc::io_error:
-            return std::unexpected{parsing_error_type_t::FILE_IO_ERROR};
-            break;
-        default:
-            return std::unexpected{parsing_error_type_t::FILE_UNKNOWN_ERROR};
-            break;
+        if (ec) {
+            switch (ec.value()) {
+                case (int)std::errc::is_a_directory:
+                case (int)std::errc::no_such_file_or_directory:
+                    return std::unexpected{parsing_error_type_t::FILE_NOT_EXISTED};
+                    break;
+                case (int)std::errc::permission_denied:
+                    return std::unexpected{parsing_error_type_t::FILE_PERMISSTION_DENIED};
+                    break;
+                case (int)std::errc::io_error:
+                    return std::unexpected{parsing_error_type_t::FILE_IO_ERROR};
+                    break;
+                default:
+                    return std::unexpected{parsing_error_type_t::FILE_UNKNOWN_ERROR};
+                    break;
+            }
         }
 
         std::ifstream file(full_dir, std::ios::in | std::ios::binary);
@@ -418,96 +422,124 @@ private:
 
 public:
     struct Accessor {
+        enum struct Error { INVALID_NAME, INDEX_OUT_OF_BOUND, INVALID_OPERATION, NOT_A_VALUE, WRONG_VALUE_TYPE, NOT_SUPPORTED_TYPE };
+        std::optional<Error> error{};
+
         SpinesDocument const *doc_ref = nullptr;
-        size_t current_id = 0;
-        std::optional<size_t> target_data_index = {}; // has value -> in a identifier, no value -> in a access value
 
-        [[nodiscard]] auto pick(std::string_view search_name) const noexcept -> Accessor {
+        size_t chain_depth = 0;
+
+        size_t cur_identifier_index = (size_t)-1;
+        std::optional<size_t> data_offset{};
+
+        [[nodiscard]] auto pick(std::string_view name) const noexcept -> Accessor {
+            if (error.has_value()) return Accessor{error, doc_ref, chain_depth};
+
             _assert(doc_ref != nullptr, "Document reference is null.");
-            _assert(!target_data_index.has_value(), "Cannot call .pick(name) on a data value.");
-            _assert(current_id < doc_ref->identifier_data_list.len, "current_id is out of bounds.");
+            _assert(cur_identifier_index < doc_ref->identifier_data_list.len, "cur_identifier_index is out of bounds.");
 
-            auto current_data = doc_ref->identifier_data_list.get(current_id).value();
+            IdentifierData cur_identifier_data = doc_ref->identifier_data_list.get(cur_identifier_index).value();
 
-            size_t search_start = current_id + 1;
-            size_t search_end = current_id + current_data.owned_data.parent_len;
+            if (data_offset.has_value()) 
+                return Accessor{Error::INVALID_OPERATION, doc_ref, chain_depth + 1};
 
+            size_t search_start = cur_identifier_index + 1;
+            size_t search_end = cur_identifier_index + cur_identifier_data.parent_len;
             _assert(search_end <= doc_ref->identifier_data_list.len, "Search range exceeds identifier_data_list bounds.");
 
             for (size_t i = search_start; i < search_end; ++i) {
                 auto child_data = doc_ref->identifier_data_list.get(i).value();
 
-                _assert(child_data.name.offset_root + child_data.name.len <= doc_ref->spines_source.size(),
+                _assert(child_data.name_offset_root + child_data.name_len <= doc_ref->spines_source.size(),
                         "String view out of bounds of spines_source.");
 
-                std::string_view child_name{doc_ref->spines_source.data() + child_data.name.offset_root, child_data.name.len};
-
-                if (child_name == search_name) { return Accessor{doc_ref, i, {}}; }
+                std::string_view child_name{doc_ref->spines_source.data() + child_data.name_offset_root, child_data.name_len};
+                if (child_name == name)
+                    return Accessor{error, doc_ref, chain_depth + 1, i, {}};
             }
 
-            // std::println("Error: Child identifier '{}' not found in this scope.", search_name);
-            _assert(false, "Child identifier not found.");
-            return *this;
+            return Accessor{Error::INVALID_NAME, doc_ref, chain_depth + 1};
         }
 
         [[nodiscard]] auto pick(size_t index) const noexcept -> Accessor {
+            if (error.has_value()) return Accessor{error, doc_ref, chain_depth};
+
             _assert(doc_ref != nullptr, "Document reference is null.");
-            _assert(!target_data_index.has_value(), "Cannot chain .pick(index) on a data value.");
-            _assert(current_id < doc_ref->identifier_data_list.len, "current_id is out of bounds.");
+            _assert(cur_identifier_index < doc_ref->identifier_data_list.len, "cur_identifier_index is out of bounds.");
 
-            auto current_data = doc_ref->identifier_data_list.get(current_id).value();
-            _assert(index < current_data.owned_data.data_len, "Data index out of bounds for this identifier.");
+            IdentifierData cur_identifier_data = doc_ref->identifier_data_list.get(cur_identifier_index).value();
 
-            _assert(current_data.owned_data.point_to + index < doc_ref->data.len,
-                    "Calculated data index out of bounds of data container.");
+            if (data_offset.has_value()) 
+                return Accessor{Error::INVALID_OPERATION, doc_ref, chain_depth + 1};
 
-            return Accessor{doc_ref, current_id, current_data.owned_data.point_to + index};
+            if (index >= cur_identifier_data.data_len) {
+                return Accessor{Error::INDEX_OUT_OF_BOUND, doc_ref, chain_depth + 1};
+            }
+
+            return Accessor{error, doc_ref, chain_depth + 1, cur_identifier_index, index};
         }
 
-        template <typename T> [[nodiscard]] auto as() const noexcept -> std::optional<T> {
-            _assert(doc_ref != nullptr, "Document reference is null.");
-            _assert(target_data_index.has_value(), "Accessor points to an identifier, not a value. Call .pick(index) first.");
-            if (!target_data_index.has_value()) return {}; // TODO error handle
+        template <typename T> [[nodiscard]] auto as() const noexcept -> std::expected<T, std::pair<Error, size_t>> {
+            if (error.has_value()) return std::unexpected{std::make_pair(error.value(), chain_depth)};
 
-            _assert(target_data_index.value() < doc_ref->data.len, "Target data index should be in bound");
-            auto val = doc_ref->data.get(target_data_index.value()).value();
+            _assert(doc_ref != nullptr, "Document reference is null.");
+            _assert(cur_identifier_index < doc_ref->identifier_data_list.len, "cur_identifier_index is out of bounds.");
+
+            IdentifierData cur_identifier_data = doc_ref->identifier_data_list.get(cur_identifier_index).value();
+
+            size_t offset = data_offset.value_or(0);
+            if (!data_offset.has_value() && cur_identifier_data.data_len != 0) {
+                return std::unexpected{std::make_pair(Error::NOT_A_VALUE, chain_depth + 1)};
+            }
+
+            size_t data_index = cur_identifier_data.data_point_to_index + offset;
+            _assert(data_index < doc_ref->data.len, "data_index is out of bounds.");
+
+            auto val = doc_ref->data.get(data_index).value();
 
             if constexpr (std::is_same_v<T, std::string_view> || std::is_same_v<T, std::string>) {
-                _assert(std::holds_alternative<unsigned int>(val), "Requested string, but data is not a string index.");
-                if (!std::holds_alternative<unsigned int>(val)) return {}; // TODO error handle
+                if (!std::holds_alternative<unsigned int>(val))
+                    return std::unexpected{std::make_pair(Error::WRONG_VALUE_TYPE, chain_depth + 1)};
 
                 unsigned int str_idx = std::get<unsigned int>(val);
                 _assert(str_idx < doc_ref->string_data.len, "String index out of bounds of string_data container.");
 
                 return std::string_view(doc_ref->string_data.get_ptr(str_idx));
 
-            } else if constexpr (std::is_same_v<T, int>) {
-                _assert(std::holds_alternative<int>(val), "Requested int, but data is not an int.");
-                if (!std::holds_alternative<int>(val)) return {}; // TODO error handle
+            } else if constexpr (std::is_arithmetic_v<T>) {
+                if (!std::holds_alternative<int>(val) && !std::holds_alternative<float>(val))
+                    return std::unexpected{std::make_pair(Error::WRONG_VALUE_TYPE, chain_depth + 1)};
 
-                return std::get<int>(val);
-
-            } else if constexpr (std::is_same_v<T, float>) {
-                _assert(std::holds_alternative<float>(val), "Requested float, but data is not a float.");
-                if (!std::holds_alternative<float>(val)) return {}; // TODO error handle
-
-                return std::get<float>(val);
+                if (std::holds_alternative<int>(val)) return (T)std::get<int>(val);
+                if (std::holds_alternative<float>(val)) return (T)std::get<float>(val);
 
             } else {
-                static_assert(sizeof(T) == 0, "Unsupported type cast for .as<T>()");
+                static_assert(false, "Unsupported type cast for .as<T>()");
             }
+
+            return std::unexpected{std::make_pair(Error::WRONG_VALUE_TYPE, chain_depth + 1)};
+        }
+
+        [[nodiscard]] auto is_error() const noexcept -> bool {
+            return error.has_value();
+        }
+
+        [[nodiscard]] auto get_error() const noexcept -> std::optional<std::pair<Error, size_t>> {
+            if (!error.has_value()) return {};
+            return std::make_pair(error.value(), chain_depth);
         }
     };
 
-    [[nodiscard]] auto pick(std::string_view root_name) const noexcept -> Accessor {
-        for (size_t i = 0; i < identifier_data_list.len; i += identifier_data_list.get(i).value().owned_data.parent_len) {
+    [[nodiscard]] auto pick(std::string_view name) const noexcept -> Accessor {
+        for (size_t i = 0; i < identifier_data_list.len;) {
             auto data = identifier_data_list.get(i).value();
-            std::string_view name{spines_source.data() + data.name.offset_root, data.name.len};
-            if (name == root_name) return Accessor{this, i, {}};
+            std::string_view cur_name{spines_source.data() + data.name_offset_root, data.name_len};
+            if (cur_name == name) return Accessor{{}, this, 0, i, {}};
+
+            i += data.parent_len;
         }
-        // std::println("Error: Root identifier '{}' not found.", root_name);
-        _assert(false, "Root identifier not found.");
-        return Accessor{this, 0, {}};
+
+        return Accessor{Accessor::Error::INVALID_NAME, this, 0};
     }
 };
 

@@ -6,7 +6,6 @@ import std;
 import :assert;
 using size_t = std::size_t;
 
-
 namespace cactus {
 
 // TODO: append with range
@@ -33,6 +32,11 @@ struct DynamicArray {
         std::memcpy(new_data, data, len * sizeof(T));
 
         return DynamicArray{.data = new_data, .len = len, .cap = cap, .allocator = new_allocator};
+    }
+    auto relinquish() noexcept {
+        data = nullptr;
+        len = 0;
+        cap = 0;
     }
 
     auto reserve(size_t new_cap) noexcept {
