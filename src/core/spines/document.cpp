@@ -57,6 +57,8 @@ export struct SpinesDocument {
     size_t next_identifier_id = 0;
     size_t next_string_data_index = 0;
 
+    bool parsed = false;
+
     [[nodiscard]] static auto make() noexcept -> SpinesDocument {
         return SpinesDocument{.spines_source{},
                               .tokens = DynamicArray<Token>::make(),
@@ -64,7 +66,8 @@ export struct SpinesDocument {
                               .string_data = DynamicArray<char>::make(),
                               .identifier_data_list = DynamicArray<IdentifierData>::make(),
                               .next_identifier_id = 0,
-                              .next_string_data_index = 0};
+                              .next_string_data_index = 0,
+                              .parsed = true};
     }
     auto destroy() {
         tokens.destroy();
@@ -181,6 +184,7 @@ export struct SpinesDocument {
             if (just_after_identifier) --just_after_identifier;
         }
 
+        parsed = true;
         return {};
     }
 
@@ -419,7 +423,15 @@ private:
 
 public:
     struct Accessor {
-        enum struct Error { INVALID_NAME, INDEX_OUT_OF_BOUND, INVALID_OPERATION, NOT_A_VALUE, WRONG_VALUE_TYPE, NOT_SUPPORTED_TYPE };
+        enum struct Error { 
+            NO_DATA,
+            INVALID_NAME,
+            INDEX_OUT_OF_BOUND,
+            INVALID_OPERATION,
+            NOT_A_VALUE,
+            WRONG_VALUE_TYPE,
+            NOT_SUPPORTED_TYPE
+        };
         std::optional<Error> error{};
 
         SpinesDocument const *doc_ref = nullptr;
@@ -528,6 +540,8 @@ public:
     };
 
     [[nodiscard]] auto pick(std::string_view name) const noexcept -> Accessor {
+        if (!parsed) return Accessor{Accessor::Error::NO_DATA, this, 0};
+
         for (size_t i = 0; i < identifier_data_list.len;) {
             auto data = identifier_data_list.get(i).value();
             std::string_view cur_name{spines_source.data() + data.name_offset_root, data.name_len};
