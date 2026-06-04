@@ -20,7 +20,6 @@ export struct Token {
 
 export struct SpinesDocumentParsingError {
     enum struct Type {
-        NONE,
         FILE_NOT_EXISTED,
         FILE_PERMISSTION_DENIED,
         FILE_IO_ERROR,
@@ -28,7 +27,7 @@ export struct SpinesDocumentParsingError {
         INVALID_IDENTIFIER_NAME,
         INVALID_VALUE,
         INVALID_SYNTAX,
-    } type = Type::NONE;
+    } type;
 
     size_t index = 0;
     size_t column = 1;
@@ -75,16 +74,14 @@ export struct SpinesDocument {
     }
     [[nodiscard]] auto clone() = delete; // FIXME
 
-    auto parse(const stdf::path &dir) -> SpinesDocumentParsingError {
+    auto parse(const stdf::path &dir) -> std::expected<void, SpinesDocumentParsingError> {
         auto spines_source_exp = get_and_preprocess_file(dir).transform_error(
             [](SpinesDocumentParsingError::Type t) { return SpinesDocumentParsingError{.type = t}; });
-        if (!spines_source_exp.has_value()) return spines_source_exp.error();
+        if (!spines_source_exp.has_value()) return std::unexpected{spines_source_exp.error()};
         spines_source = std::move(spines_source_exp.value());
 
         auto lexer_err = handle_lexer(spines_source);
-        if (lexer_err.type != parsing_error_type_t::NONE) {
-            return lexer_err;
-        }
+        if (!lexer_err.has_value()) return lexer_err;
 
         std::stack<size_t> identifier_stack{};
         short just_after_identifier = 0;
@@ -138,10 +135,10 @@ export struct SpinesDocument {
                     if (res_f.ptr == strv.data() + strv.size()) {
                         data.append(f_val);
                     } else {
-                        return SpinesDocumentParsingError{.type = parsing_error_type_t::INVALID_VALUE,
-                                                          .index = token.index,
-                                                          .column = token.column,
-                                                          .line = token.line};
+                        return std::unexpected{SpinesDocumentParsingError{.type = parsing_error_type_t::INVALID_VALUE,
+                                                                          .index = token.index,
+                                                                          .column = token.column,
+                                                                          .line = token.line}};
                     }
                 }
 
@@ -173,10 +170,10 @@ export struct SpinesDocument {
                 pop_identifier_stack();
             } break;
             default: {
-                return SpinesDocumentParsingError{.type = parsing_error_type_t::INVALID_SYNTAX,
-                                                  .index = token.index,
-                                                  .column = token.column,
-                                                  .line = token.line};
+                return std::unexpected{SpinesDocumentParsingError{.type = parsing_error_type_t::INVALID_SYNTAX,
+                                                                  .index = token.index,
+                                                                  .column = token.column,
+                                                                  .line = token.line}};
 
             } break;
             }
@@ -184,7 +181,7 @@ export struct SpinesDocument {
             if (just_after_identifier) --just_after_identifier;
         }
 
-        return SpinesDocumentParsingError{};
+        return {};
     }
 
 private:
@@ -230,7 +227,7 @@ private:
         return content;
     }
 
-    auto handle_lexer(std::string_view content_view) noexcept -> SpinesDocumentParsingError {
+    auto handle_lexer(std::string_view content_view) noexcept -> std::expected<void, SpinesDocumentParsingError> {
         enum struct ReadState {
             EXPECT_IDENTIFIER,
             EXPECT_VALUE_OR_ARR,
@@ -279,10 +276,10 @@ private:
             switch (state) {
             case ReadState::EXPECT_IDENTIFIER: {
                 if (might_be_value(content_view.front())) {
-                    return SpinesDocumentParsingError{.type = parsing_error_type_t::INVALID_IDENTIFIER_NAME,
-                                                      .index = cur_token.index,
-                                                      .column = cur_token.column,
-                                                      .line = cur_token.line};
+                    return std::unexpected{SpinesDocumentParsingError{.type = parsing_error_type_t::INVALID_IDENTIFIER_NAME,
+                                                                      .index = cur_token.index,
+                                                                      .column = cur_token.column,
+                                                                      .line = cur_token.line}};
                 }
 
                 size_t len = get_identifier_len(content_view);
@@ -316,10 +313,10 @@ private:
                         append_token(TokenType::NUMBER, num_len);
                         advance_location_horizontal(num_len);
                     } else {
-                        return SpinesDocumentParsingError{.type = parsing_error_type_t::INVALID_VALUE,
-                                                          .index = cur_token.index,
-                                                          .column = cur_token.column,
-                                                          .line = cur_token.line};
+                        return std::unexpected{SpinesDocumentParsingError{.type = parsing_error_type_t::INVALID_VALUE,
+                                                                          .index = cur_token.index,
+                                                                          .column = cur_token.column,
+                                                                          .line = cur_token.line}};
                     }
 
                     state = ReadState::AFTER_VALUE;
@@ -329,10 +326,10 @@ private:
 
             case ReadState::AFTER_IDENTIFIER: {
                 if (content_view.front() != '=' && content_view.front() != '{') {
-                    return SpinesDocumentParsingError{.type = parsing_error_type_t::INVALID_SYNTAX,
-                                                      .index = cur_token.index,
-                                                      .column = cur_token.column,
-                                                      .line = cur_token.line};
+                    return std::unexpected{SpinesDocumentParsingError{.type = parsing_error_type_t::INVALID_SYNTAX,
+                                                                      .index = cur_token.index,
+                                                                      .column = cur_token.column,
+                                                                      .line = cur_token.line}};
                 }
 
                 // the "{" will be handle later
@@ -392,7 +389,7 @@ private:
             }
         }
 
-        return SpinesDocumentParsingError{};
+        return {};
     }
 
     auto handle_remove_spaces(std::string_view *content_view, Token *token, bool *line_breaked) noexcept -> void {

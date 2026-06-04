@@ -6,8 +6,8 @@ using namespace cactus;
 int main() {
     SpinesDocument a = SpinesDocument::make();
     auto parse_err = a.parse("test/core/idk.bundle");
-    if (parse_err.type != SpinesDocumentParsingError::Type::NONE) {
-        std::println("CRITICAL: Failed to parse document! Error Code: {}", (int)parse_err.type);
+    if (!parse_err.has_value()) {
+        std::println("CRITICAL: Failed to parse document! Error Code: {}", (int)parse_err.error().type);
         a.destroy();
         return -1;
     }
