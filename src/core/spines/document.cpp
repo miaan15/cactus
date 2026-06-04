@@ -35,6 +35,8 @@ export struct SpinesDocumentParsingError {
 };
 using parsing_error_type_t = SpinesDocumentParsingError::Type;
 
+// TODO need a refactor to make a mechanic to access data point using some kind of Key (like SlotMap)
+// TODO handle the file reading and stuff for other
 export struct SpinesDocument {
     using data_t = std::variant<int, float, unsigned int>;
     struct IdentifierData {
@@ -425,23 +427,24 @@ public:
     struct Accessor {
         enum struct Error { 
             NO_DATA,
-            INVALID_NAME,
+            NAME_NOT_FOUND,
             INDEX_OUT_OF_BOUND,
             INVALID_OPERATION,
             NOT_A_VALUE,
             WRONG_VALUE_TYPE,
-            NOT_SUPPORTED_TYPE
+            NOT_SUPPORTED_TYPE,
+            STRING_OVERFLOW
         };
         std::optional<Error> error{};
 
-        SpinesDocument const *doc_ref = nullptr;
+        SpinesDocument *doc_ref = nullptr;
 
         size_t chain_depth = 0;
 
         size_t cur_identifier_index = (size_t)-1;
         std::optional<size_t> data_offset{};
 
-        [[nodiscard]] auto pick(std::string_view name) const noexcept -> Accessor {
+        [[nodiscard]] auto pick(std::string_view name) noexcept -> Accessor {
             if (error.has_value()) return Accessor{error, doc_ref, chain_depth};
 
             _assert(doc_ref != nullptr, "Document reference is null.");
@@ -456,21 +459,23 @@ public:
             size_t search_end = cur_identifier_index + cur_identifier_data.parent_len;
             _assert(search_end <= doc_ref->identifier_data_list.len, "Search range exceeds identifier_data_list bounds.");
 
-            for (size_t i = search_start; i < search_end; ++i) {
-                auto child_data = doc_ref->identifier_data_list.get(i).value();
+            for (size_t i = search_start; i < search_end;) {
+                auto data = doc_ref->identifier_data_list.get(i).value();
 
-                _assert(child_data.name_offset_root + child_data.name_len <= doc_ref->spines_source.size(),
+                _assert(data.name_offset_root + data.name_len <= doc_ref->spines_source.size(),
                         "String view out of bounds of spines_source.");
 
-                std::string_view child_name{doc_ref->spines_source.data() + child_data.name_offset_root, child_data.name_len};
-                if (child_name == name)
+                std::string_view cur_name{doc_ref->spines_source.data() + data.name_offset_root, data.name_len};
+                if (cur_name == name)
                     return Accessor{error, doc_ref, chain_depth + 1, i, {}};
+
+                i += data.parent_len;
             }
 
-            return Accessor{Error::INVALID_NAME, doc_ref, chain_depth + 1};
+            return Accessor{Error::NAME_NOT_FOUND, doc_ref, chain_depth + 1};
         }
 
-        [[nodiscard]] auto pick(size_t index) const noexcept -> Accessor {
+        [[nodiscard]] auto pick(size_t index) noexcept -> Accessor {
             if (error.has_value()) return Accessor{error, doc_ref, chain_depth};
 
             _assert(doc_ref != nullptr, "Document reference is null.");
@@ -489,22 +494,10 @@ public:
         }
 
         template <typename T> [[nodiscard]] auto as() const noexcept -> std::expected<T, std::pair<Error, size_t>> {
-            if (error.has_value()) return std::unexpected{std::make_pair(error.value(), chain_depth)};
+            auto data_index_opt = handle_pre_check_on_get_data_index();
+            if (!data_index_opt.has_value()) return std::unexpected{data_index_opt.error()};
 
-            _assert(doc_ref != nullptr, "Document reference is null.");
-            _assert(cur_identifier_index < doc_ref->identifier_data_list.len, "cur_identifier_index is out of bounds.");
-
-            IdentifierData cur_identifier_data = doc_ref->identifier_data_list.get(cur_identifier_index).value();
-
-            size_t offset = data_offset.value_or(0);
-            if (!data_offset.has_value() && cur_identifier_data.data_len != 0) {
-                return std::unexpected{std::make_pair(Error::NOT_A_VALUE, chain_depth + 1)};
-            }
-
-            size_t data_index = cur_identifier_data.data_point_to_index + offset;
-            _assert(data_index < doc_ref->data.len, "data_index is out of bounds.");
-
-            auto val = doc_ref->data.get(data_index).value();
+            auto val = doc_ref->data.get(data_index_opt.value()).value();
 
             if constexpr (std::is_same_v<T, std::string_view> || std::is_same_v<T, std::string>) {
                 if (!std::holds_alternative<unsigned int>(val))
@@ -513,7 +506,21 @@ public:
                 unsigned int str_idx = std::get<unsigned int>(val);
                 _assert(str_idx < doc_ref->string_data.len, "String index out of bounds of string_data container.");
 
-                return std::string_view(doc_ref->string_data.get_ptr(str_idx));
+                const char* string_raw = doc_ref->string_data.get_ptr(str_idx);
+                _assert(string_raw, "String data should not be null");
+
+                if (string_raw - doc_ref->string_data.data >= doc_ref->string_data.len)
+                    return std::unexpected{std::make_pair(Error::STRING_OVERFLOW, chain_depth + 1)};
+
+                size_t string_size = 0;
+                for (const char *string_it = string_raw; *string_it != '\0'; ++string_it) {
+                    ++string_size;
+
+                    if (string_raw + string_size - doc_ref->string_data.data > doc_ref->string_data.len) 
+                        return std::unexpected{std::make_pair(Error::STRING_OVERFLOW, chain_depth + 1)};
+                }
+
+                return std::string_view{string_raw, string_size};
 
             } else if constexpr (std::is_arithmetic_v<T>) {
                 if (!std::holds_alternative<int>(val) && !std::holds_alternative<float>(val))
@@ -529,6 +536,55 @@ public:
             return std::unexpected{std::make_pair(Error::WRONG_VALUE_TYPE, chain_depth + 1)};
         }
 
+        [[nodiscard]] auto as_int_ptr() noexcept -> std::expected<int *, std::pair<Error, size_t>> {
+            auto data_index_opt = handle_pre_check_on_get_data_index();
+            if (!data_index_opt.has_value()) return std::unexpected{data_index_opt.error()};
+
+            auto val = doc_ref->data.get_ptr(data_index_opt.value());
+
+            if (!std::holds_alternative<int>(*val)) 
+                return std::unexpected{std::make_pair(Error::WRONG_VALUE_TYPE, chain_depth + 1)};
+            return (int*)std::get_if<int>(val);
+        }
+        [[nodiscard]] auto as_float_ptr() noexcept -> std::expected<float *, std::pair<Error, size_t>> {
+            auto data_index_opt = handle_pre_check_on_get_data_index();
+            if (!data_index_opt.has_value()) return std::unexpected{data_index_opt.error()};
+
+            auto val = doc_ref->data.get_ptr(data_index_opt.value());
+
+            if (!std::holds_alternative<float>(*val)) 
+                return std::unexpected{std::make_pair(Error::WRONG_VALUE_TYPE, chain_depth + 1)};
+            return (float*)std::get_if<float>(val);
+        }
+        [[nodiscard]] auto as_string_span() noexcept -> std::expected<std::span<char>, std::pair<Error, size_t>> {
+            auto data_index_opt = handle_pre_check_on_get_data_index();
+            if (!data_index_opt.has_value()) return std::unexpected{data_index_opt.error()};
+
+            auto val = doc_ref->data.get(data_index_opt.value()).value();
+
+            if (!std::holds_alternative<unsigned int>(val))
+                return std::unexpected{std::make_pair(Error::WRONG_VALUE_TYPE, chain_depth + 1)};
+
+            unsigned int str_idx = std::get<unsigned int>(val);
+            _assert(str_idx < doc_ref->string_data.len, "String index out of bounds of string_data container.");
+
+            char* string_raw = doc_ref->string_data.get_ptr(str_idx);
+            _assert(string_raw, "String data should not be null");
+
+            if (string_raw - doc_ref->string_data.data >= doc_ref->string_data.len)
+                return std::unexpected{std::make_pair(Error::STRING_OVERFLOW, chain_depth + 1)};
+
+            size_t string_size = 0;
+            for (const char *string_it = string_raw; *string_it != '\0'; ++string_it) {
+                ++string_size;
+
+                if (string_raw + string_size - doc_ref->string_data.data > doc_ref->string_data.len) 
+                    return std::unexpected{std::make_pair(Error::STRING_OVERFLOW, chain_depth + 1)};
+            }
+
+            return std::span<char>{string_raw, string_size};
+        }
+
         [[nodiscard]] auto is_error() const noexcept -> bool {
             return error.has_value();
         }
@@ -537,9 +593,29 @@ public:
             if (!error.has_value()) return {};
             return std::make_pair(error.value(), chain_depth);
         }
+
+    private:
+        auto handle_pre_check_on_get_data_index() const noexcept -> std::expected<size_t, std::pair<Error, size_t>> {
+            if (error.has_value()) return std::unexpected{std::make_pair(error.value(), chain_depth)};
+
+            _assert(doc_ref != nullptr, "Document reference is null.");
+            _assert(cur_identifier_index < doc_ref->identifier_data_list.len, "cur_identifier_index is out of bounds.");
+
+            IdentifierData cur_identifier_data = doc_ref->identifier_data_list.get(cur_identifier_index).value();
+
+            size_t offset = data_offset.value_or(0);
+            if (!data_offset.has_value() && cur_identifier_data.data_len > 1) {
+                return std::unexpected{std::make_pair(Error::NOT_A_VALUE, chain_depth + 1)};
+            }
+
+            size_t data_index = cur_identifier_data.data_point_to_index + offset;
+            _assert(data_index < doc_ref->data.len, "data_index is out of bounds.");
+
+            return data_index;
+        }
     };
 
-    [[nodiscard]] auto pick(std::string_view name) const noexcept -> Accessor {
+    [[nodiscard]] auto pick(std::string_view name) noexcept -> Accessor {
         if (!parsed) return Accessor{Accessor::Error::NO_DATA, this, 0};
 
         for (size_t i = 0; i < identifier_data_list.len;) {
@@ -550,7 +626,7 @@ public:
             i += data.parent_len;
         }
 
-        return Accessor{Accessor::Error::INVALID_NAME, this, 0};
+        return Accessor{Accessor::Error::NAME_NOT_FOUND, this, 0};
     }
 };
 
