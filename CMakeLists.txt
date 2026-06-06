@@ -94,6 +94,21 @@ endif()
 
 add_compile_options(-ftime-trace)
 
+if(CMAKE_BUILD_TYPE STREQUAL "Debug ")
+    message(STATUS "Debug build detected: Enabling strict warnings.")
+    add_compile_options(
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Wshadow
+        -Wconversion
+        -Wsign-conversion
+        -Wcast-align
+        -Wnull-dereference
+        -Wdouble-promotion
+    )
+endif()
+
 # ---------------------------------------------------------
 # Create target
 # ---------------------------------------------------------

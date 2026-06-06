@@ -54,7 +54,7 @@ int main() {
     player_data.move_speed = player_doc.pick("move_speed").as<int>()
         .transform_error([](auto p) {std::println("error get move_speed {} {}", (int)p.first, p.second); return p;})
         .value_or(0);
-    player_data.attack_duration = player_doc.pick("attack_duration").as<int>()
+    player_data.attack_duration = player_doc.pick("attack_duration").as<float>()
         .transform_error([](auto p) {std::println("error get attack_duration {} {}", (int)p.first, p.second); return p;})
         .value_or(0);
 
@@ -76,9 +76,6 @@ int main() {
             player_params.is_attacking = true;
             player_params.start_attack_time = GetTime();
         }
-        if (GetTime() - player_params.start_attack_time > player_data.attack_duration) {
-            player_params.is_attacking = false;
-        }
 
         if (!player_params.is_attacking) {
             if (move_input.x != 0.0f || move_input.y != 0.0f) {
@@ -94,6 +91,10 @@ int main() {
             }
         }
         else {
+            if (GetTime() - player_params.start_attack_time > player_data.attack_duration) {
+                player_params.is_attacking = false;
+            }
+
             player_params.move_dir = {0, 0};
         }
 
