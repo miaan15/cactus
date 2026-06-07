@@ -53,20 +53,10 @@ else()
 endif()
 
 # ---------------------------------------------------------
-# Fetching
+# Vendors
 # ---------------------------------------------------------
-message(STATUS "Running vendor fetch script...")
-set(FETCH_VENDORS_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/fetch_vendors.sh)
-file(CHMOD "${FETCH_VENDORS_SCRIPT}"
-    PERMISSIONS
-    OWNER_READ OWNER_WRITE OWNER_EXECUTE
-    GROUP_READ GROUP_EXECUTE
-    WORLD_READ WORLD_EXECUTE
-)
-execute_process(
-    COMMAND "${FETCH_VENDORS_SCRIPT}"
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/vendor_sdl.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/vendor_glm.cmake)
 
 # ---------------------------------------------------------
 # Vars
@@ -77,9 +67,8 @@ set(SRC_DIR ${CMAKE_SOURCE_DIR}/src)
 set(DEMO_DIR ${CMAKE_SOURCE_DIR}/demo)
 set(TEST_DIR ${CMAKE_SOURCE_DIR}/test)
 set(INC_DIRS
-    ${VENDOR_DIR}/eabase/include/Common
-    ${VENDOR_DIR}/raylib/src
-    ${VENDOR_DIR}/spdlog/include
+    ${SDL_INCLUDE_DIR}
+    ${GLM_INCLUDE_DIR}
 )
 file(GLOB_RECURSE SRCS CONFIGURE_DEPENDS "${SRC_DIR}/*.cpp")
 file(GLOB_RECURSE SRC_MODULES CONFIGURE_DEPENDS "${SRC_DIR}/*.cppm")
@@ -117,18 +106,13 @@ set(MODULE_FILES
     ${SRCS}
     ${SRC_MODULES}
     ${MODULE_DIR}/std/std.cppm
-    ${MODULE_DIR}/raylib/raylib.cppm
-    ${VENDOR_DIR}/glm/glm/glm.cppm
-    ${MODULE_DIR}/spdlog/spdlog.cppm
+    ${MODULE_DIR}/sdl/sdl.cppm
+    ${GLM_MODULE_SOURCE}
 )
 set(LIBS
-    raylib
+    ${SDL_TARGET}
+    ${GLM_TARGET}
 )
-
-# ---------------------------------------------------------
-# Libs subdirectory
-# ---------------------------------------------------------
-add_subdirectory(${VENDOR_DIR}/raylib)
 
 # ---------------------------------------------------------
 # To lib
@@ -192,13 +176,14 @@ if(CACTUS_BUILD_TESTS)
             RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/test"
         )
 
+        set(TEST_LIB_SRC "${TEST_DIR}/test.cpp")
+
         target_sources(${TEST_NAME} PRIVATE 
-            FILE_SET CXX_MODULES FILES ${MODULE_FILES}
+            FILE_SET CXX_MODULES FILES ${MODULE_FILES} ${TEST_LIB_SRC}
         )
 
         target_include_directories(${TEST_NAME} PRIVATE 
             ${INC_DIRS}
-            "${VENDOR_DIR}/doctest/doctest"
         )
         target_link_libraries(${TEST_NAME} PRIVATE ${LIBS})
 
@@ -206,6 +191,7 @@ if(CACTUS_BUILD_TESTS)
     endfunction()
 
     file(GLOB_RECURSE TEST_SRCS CONFIGURE_DEPENDS "${TEST_DIR}/*.cpp")
+    list(REMOVE_ITEM TEST_SRCS "${TEST_DIR}/test.cpp")
     foreach(TEST_SOURCE IN LISTS TEST_SRCS) 
         get_filename_component(TEST_SOURCE_NAME "${TEST_SOURCE}" NAME_WE)
         set(TEST_NAME "${TEST_SOURCE_NAME}")
