@@ -33,12 +33,11 @@ struct PlayerData {
 };
 
 int main() {
-    // 1. Initialize core SDL3 only
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         std::cerr << "Failed to init SDL: " << SDL_GetError() << std::endl;
         return -1;
     }
-    
+
     SDL_Window* window = nullptr;
     SDL_Renderer* renderer = nullptr;
     if (!SDL_CreateWindowAndRenderer("BurningFloor", screen_width, screen_height, 0, &window, &renderer)) {
@@ -46,20 +45,22 @@ int main() {
         return -1;
     }
 
-    // 2. Load Texture using Native SDL3 PNG Support
     stdf::path player_sprite_dir = "image/img_player_00.png";
     std::string tex_path = (asset_dir / player_sprite_dir).string();
-    
+
     SDL_Texture* player_texture = nullptr;
     SDL_Surface* surface = SDL_LoadPNG(tex_path.c_str());
-    
+
     if (surface) {
         player_texture = SDL_CreateTextureFromSurface(renderer, surface);
-        SDL_DestroySurface(surface); // Don't forget to free the CPU surface data!
+        SDL_DestroySurface(surface);
+        if (player_texture) {
+            SDL_SetTextureScaleMode(player_texture, SDL_SCALEMODE_NEAREST);
+        }
     }
 
-    if (!player_texture) { 
-        std::cerr << "Failed to load texture at: " << tex_path << " | Error: " << SDL_GetError() << std::endl; 
+    if (!player_texture) {
+        std::cerr << "Failed to load texture at: " << tex_path << " | Error: " << SDL_GetError() << std::endl;
     }
 
     auto player_sprites = cactus::DynamicArray<PlayerSprite>::make();
@@ -107,7 +108,7 @@ int main() {
 
         const bool* key_state = SDL_GetKeyboardState(nullptr);
         glm::vec2 move_input{0, 0};
-        
+
         if (key_state[SDL_SCANCODE_UP]) move_input.y += 1;
         if (key_state[SDL_SCANCODE_LEFT]) move_input.x -= 1;
         if (key_state[SDL_SCANCODE_DOWN]) move_input.y -= 1;
@@ -148,18 +149,18 @@ int main() {
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
         SDL_RenderClear(renderer);
 
-        SDL_FRect player_src_rect = 
+        SDL_FRect player_src_rect =
             player_sprites.get(player_params.cur_frame_index).value_or(PlayerSprite{}).src_rect;
-        
+
         SDL_FlipMode flip = SDL_FLIP_NONE;
         if (player_params.facing_dir.x > 0) {
             flip = SDL_FLIP_HORIZONTAL;
         }
 
         SDL_FRect dest_rect = {
-            player_params.pos.x, 
-            screen_height - player_params.pos.y, 
-            128.0f, 
+            player_params.pos.x,
+            screen_height - player_params.pos.y,
+            128.0f,
             128.0f
         };
 
@@ -169,7 +170,7 @@ int main() {
             &player_src_rect,
             &dest_rect,
             0.0,
-            nullptr, 
+            nullptr,
             flip
         );
 
