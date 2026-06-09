@@ -12,14 +12,14 @@ import cactus.core.strat;
 
 namespace cactus {
 
+const bool *keyboard_state;
+auto key_state(Scancode key) noexcept -> bool {
+    return keyboard_state[(SDL_Scancode)key];
+}
+
 struct alignas(alignof(std::max_align_t)) InputActionData {
     char raw[sizeof(glm::vec2)]; // FIXME maybe not vec2
 };
-
-export auto is_using(Scancode key) noexcept -> bool {
-    const bool *state = SDL_GetKeyboardState(nullptr);
-    return state[(SDL_Scancode)key];
-}
 
 // ==============================================================================
 // InputBindings
@@ -37,7 +37,7 @@ export struct ButtonInputBindingMethod {
         bool v{};
         std::memcpy(&v, data, sizeof(bool));
 
-        if (!v) v = is_using(key);
+        if (!v) v = key_state(key);
 
         std::memcpy(data, &v, sizeof(bool));
     }
@@ -53,18 +53,21 @@ export struct UDLRInputBindingMethod {
         glm::vec2 v{};
         std::memcpy(&v, data, sizeof(glm::vec2));
 
-        if (is_using(up_key)) v.y += 1;
-        if (is_using(down_key)) v.y -= 1;
-        if (is_using(left_key)) v.x -= 1;
-        if (is_using(right_key)) v.x += 1;
-        if (v.x < -1) v.x = -1;
-        if (v.x > 1) v.x = 1;
-        if (v.y < -1) v.y = -1;
-        if (v.y > 1) v.y = 1;
+        if (key_state(up_key)    && v.y <= 0) v.y += 1;
+        if (key_state(down_key)  && v.y >= 0) v.y -= 1;
+        if (key_state(left_key)  && v.x >= 0) v.x -= 1;
+        if (key_state(right_key) && v.x <= 0) v.x += 1;
 
-        v = glm::normalize(v);
+        if (glm::dot(v, v) >= 0.0001f) v = glm::normalize(v);
 
         std::memcpy(data, &v, sizeof(glm::vec2));
+    }
+
+    [[nodiscard]] static auto make_use_arrows() noexcept -> UDLRInputBindingMethod {
+        return UDLRInputBindingMethod{Scancode::UP, Scancode::DOWN, Scancode::LEFT, Scancode::RIGHT};
+    }
+    [[nodiscard]] static auto make_use_wasd() noexcept -> UDLRInputBindingMethod {
+        return UDLRInputBindingMethod{Scancode::W, Scancode::S, Scancode::A, Scancode::D};
     }
 };
 
@@ -82,6 +85,10 @@ export struct InputAction {
     DynamicArray<InputBindingMethod> methods = DynamicArray<InputBindingMethod>::make();
 
     [[nodiscard]] static auto make() noexcept -> InputAction { return InputAction{}; }
+    auto destroy() noexcept {
+        methods.destroy();
+    }
+    [[nodiscard]] auto clone() const noexcept -> InputAction = delete; // TODO
 
     auto add_binding_method(InputBindingMethod &&method) noexcept {
         methods.append(std::move(method));
@@ -103,9 +110,8 @@ export struct InputAction {
         return result;
     }
 
-    auto update() noexcept {
-        std::memcpy(&last_data, &data, sizeof(InputActionData));
-        std::memset(&data, 0, sizeof(InputActionData));
+    auto receive_inputs() noexcept {
+        keyboard_state = SDL_GetKeyboardState(nullptr);
 
         for (const auto &method : methods) {
             auto visitor = [&]<InputBindingMethodConcept T>(const T &m) {
@@ -113,6 +119,11 @@ export struct InputAction {
             };
             std::visit(visitor, method);
         }
+    }
+
+    auto reset() noexcept {
+        std::memcpy(&last_data, &data, sizeof(InputActionData));
+        std::memset(&data, 0, sizeof(InputActionData));
     }
 };
 
