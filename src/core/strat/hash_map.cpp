@@ -1,17 +1,19 @@
 module;
 
-export module cactus.core.strat:hash_map;
+export module cact.core.strat:hash_map;
 
 import std;
 import :assert;
 
 using size_t = std::size_t;
 
-namespace cactus {
+namespace cact {
 
-export template <typename K, typename V, typename Hash = std::hash<K>, typename KeyEqual = std::equal_to<K>,
+export template <typename K, typename V,
+                 typename Hash = std::hash<K>,
+                 typename KeyEqual = std::equal_to<K>,
                  typename Alloc = std::allocator<std::pair<K, V>>>
-    requires std::is_trivially_copyable_v<V>
+requires std::is_trivially_copyable_v<V>
 struct HashMap {
     enum SlotState : char { EMPTY = 0, OCCUPIED, DELETED };
 
@@ -20,6 +22,7 @@ struct HashMap {
     using state_alloc_traits_t = std::allocator_traits<state_alloc_t>;
     using slot_t = std::pair<K, V>;
 
+    // =========================================================================
     slot_t *slots = nullptr;
     SlotState *states = nullptr;
     size_t len = 0;
@@ -29,8 +32,12 @@ struct HashMap {
     [[no_unique_address]] Alloc allocator = Alloc();
     [[no_unique_address]] state_alloc_t state_allocator = state_alloc_t();
 
-    [[nodiscard]] static auto make() noexcept -> HashMap { return HashMap{}; }
-    auto destroy() noexcept {
+    // =========================================================================
+    [[nodiscard]] static HashMap make() noexcept {
+        return HashMap{};
+    }
+
+    void destroy() noexcept {
         if (slots) {
             for (size_t i = 0; i < cap; ++i) {
                 if (states[i] == OCCUPIED) slots[i].~slot_t();
@@ -44,7 +51,8 @@ struct HashMap {
         cap = 0;
         deleted_count = 0;
     }
-    [[nodiscard]] auto clone() const noexcept -> HashMap {
+
+    [[nodiscard]] HashMap clone() const noexcept {
         if (cap < 8) return HashMap::make();
 
         Alloc new_allocator = Alloc(allocator);
@@ -66,12 +74,22 @@ struct HashMap {
                        .state_allocator = new_state_allocator};
     }
 
-    auto rehash(size_t new_cap) noexcept {
+    void relinquish() noexcept {
+        slots = nullptr;
+        states = nullptr;
+        len = 0;
+        cap = 0;
+        deleted_count = 0;
+    }
+
+    // =========================================================================
+    void rehash(size_t new_cap) noexcept {
         _assert((new_cap & (new_cap - 1)) == 0, "HashMap rehash(): new_cap must be a power of two");
 
         slot_t *new_slots = alloc_traits_t::allocate(allocator, new_cap);
         if (!new_slots) _assert(false, "HashMap failed to allocate memory");
-        SlotState *new_states = state_alloc_traits_t::allocate(state_allocator, new_cap);
+        SlotState *new_states =
+            state_alloc_traits_t::allocate(state_allocator, new_cap);
         if (!new_states) _assert(false, "HashMap failed to allocate memory");
         std::memset(new_states, EMPTY, new_cap * sizeof(SlotState));
 
@@ -81,7 +99,8 @@ struct HashMap {
                     size_t hash = Hash{}(slots[i].first);
                     size_t index = hash & (new_cap - 1);
 
-                    while (new_states[index] != EMPTY) index = (index + 1) & (new_cap - 1);
+                    while (new_states[index] != EMPTY)
+                        index = (index + 1) & (new_cap - 1);
 
                     new (&new_slots[index]) slot_t(std::move(slots[i]));
                     new_states[index] = OCCUPIED;
@@ -99,7 +118,7 @@ struct HashMap {
         deleted_count = 0;
     }
 
-    auto add(const K &key, const V &value) noexcept -> bool {
+    bool add(const K &key, const V &value) noexcept {
         if ((len + deleted_count) * 10 >= cap * 7) { rehash(cap < 8 ? 8 : cap * 2); }
 
         constexpr size_t EMPTY_DELETED_I = static_cast<size_t>(-1);
@@ -108,8 +127,12 @@ struct HashMap {
         size_t first_deleted = EMPTY_DELETED_I;
 
         while (states[index] != EMPTY) {
-            if (states[index] == OCCUPIED && KeyEqual{}(slots[index].first, key)) { return false; }
-            if (states[index] == DELETED && first_deleted == EMPTY_DELETED_I) { first_deleted = index; }
+            if (states[index] == OCCUPIED && KeyEqual{}(slots[index].first, key)) {
+                return false;
+            }
+            if (states[index] == DELETED && first_deleted == EMPTY_DELETED_I) {
+                first_deleted = index;
+            }
             index = (index + 1) & (cap - 1);
         }
 
@@ -123,7 +146,7 @@ struct HashMap {
 
         return true;
     }
-    auto add(K &&key, const V &value) noexcept -> bool {
+    bool add(K &&key, const V &value) noexcept {
         if ((len + deleted_count) * 10 >= cap * 7) { rehash(cap < 8 ? 8 : cap * 2); }
 
         constexpr size_t EMPTY_DELETED_I = static_cast<size_t>(-1);
@@ -132,8 +155,12 @@ struct HashMap {
         size_t first_deleted = EMPTY_DELETED_I;
 
         while (states[index] != EMPTY) {
-            if (states[index] == OCCUPIED && KeyEqual{}(slots[index].first, key)) { return false; }
-            if (states[index] == DELETED && first_deleted == EMPTY_DELETED_I) { first_deleted = index; }
+            if (states[index] == OCCUPIED && KeyEqual{}(slots[index].first, key)) {
+                return false;
+            }
+            if (states[index] == DELETED && first_deleted == EMPTY_DELETED_I) {
+                first_deleted = index;
+            }
             index = (index + 1) & (cap - 1);
         }
 
@@ -148,7 +175,7 @@ struct HashMap {
         return true;
     }
 
-    auto set(const K &key, const V &value) noexcept -> bool {
+    bool set(const K &key, const V &value) noexcept {
         if ((len + deleted_count) * 10 >= cap * 7) { rehash(cap < 8 ? 8 : cap * 2); }
 
         constexpr size_t EMPTY_DELETED_I = static_cast<size_t>(-1);
@@ -165,7 +192,7 @@ struct HashMap {
 
         return false;
     }
-    auto set(K &&key, const V &value) noexcept -> bool {
+    bool set(K &&key, const V &value) noexcept {
         if ((len + deleted_count) * 10 >= cap * 7) { rehash(cap < 8 ? 8 : cap * 2); }
 
         constexpr size_t EMPTY_DELETED_I = static_cast<size_t>(-1);
@@ -183,7 +210,7 @@ struct HashMap {
         return false;
     }
 
-    auto add_or_set(const K &key, const V &value) noexcept {
+    void add_or_set(const K &key, const V &value) noexcept {
         if ((len + deleted_count) * 10 >= cap * 7) { rehash(cap < 8 ? 8 : cap * 2); }
 
         constexpr size_t EMPTY_DELETED_I = static_cast<size_t>(-1);
@@ -196,7 +223,9 @@ struct HashMap {
                 slots[index].second = value;
                 return;
             }
-            if (states[index] == DELETED && first_deleted == EMPTY_DELETED_I) { first_deleted = index; }
+            if (states[index] == DELETED && first_deleted == EMPTY_DELETED_I) {
+                first_deleted = index;
+            }
             index = (index + 1) & (cap - 1);
         }
 
@@ -208,7 +237,7 @@ struct HashMap {
 
         if (target == first_deleted) --deleted_count;
     }
-    auto add_or_set(K &&key, const V &value) noexcept {
+    void add_or_set(K &&key, const V &value) noexcept {
         if ((len + deleted_count) * 10 >= cap * 7) { rehash(cap < 8 ? 8 : cap * 2); }
 
         constexpr size_t EMPTY_DELETED_I = static_cast<size_t>(-1);
@@ -221,7 +250,9 @@ struct HashMap {
                 slots[index].second = value;
                 return;
             }
-            if (states[index] == DELETED && first_deleted == EMPTY_DELETED_I) { first_deleted = index; }
+            if (states[index] == DELETED && first_deleted == EMPTY_DELETED_I) {
+                first_deleted = index;
+            }
             index = (index + 1) & (cap - 1);
         }
 
@@ -234,7 +265,7 @@ struct HashMap {
         if (target == first_deleted) --deleted_count;
     }
 
-    auto remove(const K &key) noexcept -> bool {
+    bool remove(const K &key) noexcept {
         if (cap < 8) return false;
 
         size_t hash = Hash{}(key);
@@ -255,39 +286,45 @@ struct HashMap {
         return false;
     }
 
-    [[nodiscard]] auto get(const K &key) const noexcept -> std::optional<V> {
+    [[nodiscard]] std::optional<V> get(const K &key) const noexcept {
         if (cap < 8) return {};
         size_t hash = Hash{}(key);
         size_t index = hash & (cap - 1);
         while (states[index] != EMPTY) {
-            if (states[index] == OCCUPIED && KeyEqual{}(slots[index].first, key)) { return slots[index].second; }
+            if (states[index] == OCCUPIED && KeyEqual{}(slots[index].first, key)) {
+                return slots[index].second;
+            }
             index = (index + 1) & (cap - 1);
         }
         return {};
     }
 
-    [[nodiscard]] auto get_ptr(const K &key) noexcept -> V * {
+    [[nodiscard]] V * get_ptr(const K &key) noexcept {
         if (cap < 8) return nullptr;
         size_t hash = Hash{}(key);
         size_t index = hash & (cap - 1);
         while (states[index] != EMPTY) {
-            if (states[index] == OCCUPIED && KeyEqual{}(slots[index].first, key)) { return &slots[index].second; }
+            if (states[index] == OCCUPIED && KeyEqual{}(slots[index].first, key)) {
+                return &slots[index].second;
+            }
             index = (index + 1) & (cap - 1);
         }
         return nullptr;
     }
-    [[nodiscard]] auto get_ptr(const K &key) const noexcept -> const V * {
+    [[nodiscard]] const V * get_ptr(const K &key) const noexcept {
         if (cap < 8) return nullptr;
         size_t hash = Hash{}(key);
         size_t index = hash & (cap - 1);
         while (states[index] != EMPTY) {
-            if (states[index] == OCCUPIED && KeyEqual{}(slots[index].first, key)) { return &slots[index].second; }
+            if (states[index] == OCCUPIED && KeyEqual{}(slots[index].first, key)) {
+                return &slots[index].second;
+            }
             index = (index + 1) & (cap - 1);
         }
         return nullptr;
     }
 
-    [[nodiscard]] auto get_or_add_ptr(const K &key) noexcept -> V * {
+    [[nodiscard]] V * get_or_add_ptr(const K &key) noexcept {
         if ((len + deleted_count) * 10 >= cap * 7) { rehash(cap < 8 ? 8 : cap * 2); }
 
         constexpr size_t EMPTY_DELETED_I = static_cast<size_t>(-1);
@@ -296,8 +333,12 @@ struct HashMap {
         size_t first_deleted = EMPTY_DELETED_I;
 
         while (states[index] != EMPTY) {
-            if (states[index] == OCCUPIED && KeyEqual{}(slots[index].first, key)) { return &slots[index].second; }
-            if (states[index] == DELETED && first_deleted == EMPTY_DELETED_I) { first_deleted = index; }
+            if (states[index] == OCCUPIED && KeyEqual{}(slots[index].first, key)) {
+                return &slots[index].second;
+            }
+            if (states[index] == DELETED && first_deleted == EMPTY_DELETED_I) {
+                first_deleted = index;
+            }
             index = (index + 1) & (cap - 1);
         }
 
@@ -311,7 +352,7 @@ struct HashMap {
 
         return &slots[target].second;
     }
-    [[nodiscard]] auto get_or_add_ptr(K &&key) noexcept -> V * {
+    [[nodiscard]] V * get_or_add_ptr(K &&key) noexcept {
         if ((len + deleted_count) * 10 >= cap * 7) { rehash(cap < 8 ? 8 : cap * 2); }
 
         constexpr size_t EMPTY_DELETED_I = static_cast<size_t>(-1);
@@ -320,8 +361,12 @@ struct HashMap {
         size_t first_deleted = EMPTY_DELETED_I;
 
         while (states[index] != EMPTY) {
-            if (states[index] == OCCUPIED && KeyEqual{}(slots[index].first, key)) { return &slots[index].second; }
-            if (states[index] == DELETED && first_deleted == EMPTY_DELETED_I) { first_deleted = index; }
+            if (states[index] == OCCUPIED && KeyEqual{}(slots[index].first, key)) {
+                return &slots[index].second;
+            }
+            if (states[index] == DELETED && first_deleted == EMPTY_DELETED_I) {
+                first_deleted = index;
+            }
             index = (index + 1) & (cap - 1);
         }
 
@@ -336,18 +381,20 @@ struct HashMap {
         return &slots[target].second;
     }
 
-    [[nodiscard]] auto has(const K &key) const noexcept -> bool {
+    [[nodiscard]] bool has(const K &key) const noexcept {
         if (cap < 8) return false;
         size_t hash = Hash{}(key);
         size_t index = hash & (cap - 1);
         while (states[index] != EMPTY) {
-            if (states[index] == OCCUPIED && KeyEqual{}(slots[index].first, key)) { return true; }
+            if (states[index] == OCCUPIED && KeyEqual{}(slots[index].first, key)) {
+                return true;
+            }
             index = (index + 1) & (cap - 1);
         }
         return false;
     }
 
-    auto clear() noexcept {
+    void clear() noexcept {
         if (!slots) return;
 
         for (size_t i = 0; i < cap; ++i) {
@@ -359,7 +406,7 @@ struct HashMap {
         deleted_count = 0;
     }
 
-    [[nodiscard]] auto empty() const noexcept -> bool { return len == 0; }
+    [[nodiscard]] bool empty() const noexcept { return len == 0; }
 
     template <bool IsConst> struct IteratorImpl {
         using map_type = std::conditional_t<IsConst, const HashMap, HashMap>;
@@ -375,33 +422,35 @@ struct HashMap {
         map_ptr map;
         size_t index;
 
-        IteratorImpl(map_ptr m, size_t i) noexcept : map(m), index(i) { advance_to_valid(); }
+        IteratorImpl(map_ptr m, size_t i) noexcept : map(m), index(i) {
+            advance_to_valid();
+        }
 
-        auto advance_to_valid() noexcept -> void {
+        void advance_to_valid() noexcept {
             while (index < map->cap && map->states[index] != OCCUPIED) { ++index; }
         }
 
-        [[nodiscard]] auto operator*() const noexcept -> reference { return map->slots[index]; }
+        [[nodiscard]] reference operator*() const noexcept { return map->slots[index]; }
 
-        [[nodiscard]] auto operator->() const noexcept -> pointer { return &map->slots[index]; }
+        [[nodiscard]] pointer operator->() const noexcept { return &map->slots[index]; }
 
-        auto operator++() noexcept -> IteratorImpl & {
+        IteratorImpl & operator++() noexcept {
             ++index;
             advance_to_valid();
             return *this;
         }
 
-        auto operator++(int) noexcept -> IteratorImpl {
+        IteratorImpl operator++(int) noexcept {
             IteratorImpl tmp = *this;
             ++(*this);
             return tmp;
         }
 
-        [[nodiscard]] friend auto operator==(const IteratorImpl &a, const IteratorImpl &b) noexcept -> bool {
+        [[nodiscard]] friend bool operator==(const IteratorImpl &a, const IteratorImpl &b) noexcept {
             return a.index == b.index;
         }
 
-        [[nodiscard]] friend auto operator!=(const IteratorImpl &a, const IteratorImpl &b) noexcept -> bool {
+        [[nodiscard]] friend bool operator!=(const IteratorImpl &a, const IteratorImpl &b) noexcept {
             return a.index != b.index;
         }
     };
@@ -409,14 +458,12 @@ struct HashMap {
     using iterator = IteratorImpl<false>;
     using const_iterator = IteratorImpl<true>;
 
-    [[nodiscard]] auto begin() noexcept -> iterator { return iterator(this, 0); }
-    [[nodiscard]] auto end() noexcept -> iterator { return iterator(this, cap); }
-
-    [[nodiscard]] auto begin() const noexcept -> const_iterator { return const_iterator(this, 0); }
-    [[nodiscard]] auto end() const noexcept -> const_iterator { return const_iterator(this, cap); }
-
-    [[nodiscard]] auto cbegin() const noexcept -> const_iterator { return begin(); }
-    [[nodiscard]] auto cend() const noexcept -> const_iterator { return end(); }
+    [[nodiscard]] iterator begin() noexcept { return iterator(this, 0); }
+    [[nodiscard]] iterator end() noexcept { return iterator(this, cap); }
+    [[nodiscard]] const_iterator begin() const noexcept { return const_iterator(this, 0); }
+    [[nodiscard]] const_iterator end() const noexcept { return const_iterator(this, cap); }
+    [[nodiscard]] const_iterator cbegin() const noexcept { return begin(); }
+    [[nodiscard]] const_iterator cend() const noexcept { return end(); }
 };
 
-} // namespace cactus
+} // namespace cact

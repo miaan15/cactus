@@ -3,7 +3,7 @@ export module cactus_test;
 
 import std;
 
-export namespace cactus::test {
+export namespace cact::test {
 
 inline int fail_count = 0;
 
@@ -40,4 +40,4 @@ inline void report() {
     }
 }
 
-} // namespace cactus::test
+} // namespace cact::test

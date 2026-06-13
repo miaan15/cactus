@@ -2,14 +2,14 @@ module;
 
 #include <climits>
 
-export module cactus.core.strat:slot_map;
+export module cact.core.strat:slot_map;
 
 import std;
 import :dynamic_array;
 
 using size_t = std::size_t;
 
-namespace cactus {
+namespace cact {
 
 export struct SlotMapKey {
     size_t index : (sizeof(size_t) * CHAR_BIT) - CHAR_BIT;
@@ -19,12 +19,13 @@ export struct SlotMapKey {
 };
 
 export template <typename T, typename Alloc = std::allocator<T>>
-    requires std::is_trivially_copyable_v<T>
+requires std::is_trivially_copyable_v<T>
 struct SlotMap {
     using allocator_traits_t = std::allocator_traits<Alloc>;
     using slot_allocator_t = typename allocator_traits_t::template rebind_alloc<SlotMapKey>;
     using slot_container_t = DynamicArray<SlotMapKey, slot_allocator_t>;
 
+    // =========================================================================
     T *data = nullptr;
     size_t *slot_indexes = nullptr;
     size_t len = 0;
@@ -33,12 +34,17 @@ struct SlotMap {
     slot_container_t slots = slot_container_t::make();
     size_t next_slot_index = 0;
 
-    [[nodiscard]] static auto make() noexcept -> SlotMap { return SlotMap{}; }
-    auto destroy() noexcept {
+    // =========================================================================
+    [[nodiscard]] static SlotMap make() noexcept { 
+        return SlotMap{};
+    }
+
+    void destroy() noexcept {
         auto slot_alloc = slots.allocator;
 
         if (data) {
-            using T_alloc_t = typename std::allocator_traits<slot_allocator_t>::template rebind_alloc<T>;
+            using T_alloc_t = 
+                typename std::allocator_traits<slot_allocator_t>::template rebind_alloc<T>;
             using T_alloc_traits_t = std::allocator_traits<T_alloc_t>;
             T_alloc_t t_alloc{slot_alloc};
             T_alloc_traits_t::deallocate(t_alloc, data, cap);
@@ -55,36 +61,41 @@ struct SlotMap {
 
         slots.destroy();
     }
-    [[nodiscard]] auto clone() const noexcept -> SlotMap {
+
+    [[nodiscard]] SlotMap clone() const noexcept {
         if (cap == 0) return SlotMap::make();
 
         auto new_slots = slots.clone();
         auto new_slot_alloc = new_slots.allocator;
 
-        using T_alloc_t = typename std::allocator_traits<slot_allocator_t>::template rebind_alloc<T>;
+        using T_alloc_t = 
+            typename std::allocator_traits<slot_allocator_t>::template rebind_alloc<T>;
         using T_alloc_traits_t = std::allocator_traits<T_alloc_t>;
         T_alloc_t t_alloc{new_slot_alloc};
         T *new_data = T_alloc_traits_t::allocate(t_alloc, cap);
         std::memcpy(new_data, data, cap * sizeof(T));
 
-        using size_alloc_t = typename std::allocator_traits<slot_allocator_t>::template rebind_alloc<T>;
+        using size_alloc_t = 
+            typename std::allocator_traits<slot_allocator_t>::template rebind_alloc<T>;
         using size_alloc_traits_t = std::allocator_traits<size_alloc_t>;
         size_alloc_t size_alloc{new_slot_alloc};
         size_t *new_slot_indexes = size_alloc_traits_t::allocate(size_alloc, cap);
         std::memcpy(new_slot_indexes, slot_indexes, cap * sizeof(size_t));
 
-        return SlotMap{.data = new_data,
-                       .slot_indexes = new_slot_indexes,
-                       .len = len,
-                       .cap = cap,
-                       .slots = std::move(new_slots),
-                       .next_slot_index = next_slot_index};
+        return SlotMap{
+            .data = new_data,
+            .slot_indexes = new_slot_indexes,
+            .len = len,
+            .cap = cap,
+            .slots = std::move(new_slots),
+            .next_slot_index = next_slot_index};
     }
 
-    [[nodiscard]] auto add(const T &val) noexcept -> SlotMapKey {
-        handle_append_data(val, next_slot_index);
+    [[nodiscard]] SlotMapKey add(const T &val) noexcept {
+        _handle_append_data(val, next_slot_index);
 
-        if (next_slot_index == slots.len) slots.append(SlotMapKey{.index = next_slot_index + 1, .gen = 0});
+        if (next_slot_index == slots.len) 
+            slots.append(SlotMapKey{.index = next_slot_index + 1, .gen = 0});
 
         SlotMapKey *slot_ptr = slots.get_ptr(next_slot_index);
         size_t index = next_slot_index;
@@ -95,7 +106,7 @@ struct SlotMap {
         return SlotMapKey{.index = index, .gen = slot_ptr->gen};
     }
 
-    auto remove(SlotMapKey key) noexcept -> bool {
+    bool remove(SlotMapKey key) noexcept {
         if (key.index >= slots.len) return false;
 
         SlotMapKey *slot_ptr = slots.get_ptr(key.index);
@@ -116,7 +127,7 @@ struct SlotMap {
             slot_indexes[data_index] = last_slot_index;
         }
 
-        handle_pop_data();
+        _handle_pop_data();
 
         slot_ptr->index = next_slot_index;
         next_slot_index = key.index;
@@ -126,7 +137,7 @@ struct SlotMap {
         return true;
     }
 
-    auto set(SlotMapKey key, const T &val) noexcept -> bool {
+    bool set(SlotMapKey key, const T &val) noexcept {
         size_t index = key.index;
         if (index >= slots.len) return false;
 
@@ -137,7 +148,7 @@ struct SlotMap {
         return true;
     }
 
-    [[nodiscard]] auto get(SlotMapKey key) const noexcept -> std::optional<T> {
+    [[nodiscard]] std::optional<T> get(SlotMapKey key) const noexcept {
         size_t index = key.index;
         if (index >= slots.len) return {};
 
@@ -147,7 +158,7 @@ struct SlotMap {
         return data[slot.index];
     }
 
-    [[nodiscard]] auto get_ptr(SlotMapKey key) noexcept -> T * {
+    [[nodiscard]] T * get_ptr(SlotMapKey key) noexcept {
         size_t index = key.index;
         if (index >= slots.len) return nullptr;
 
@@ -156,7 +167,7 @@ struct SlotMap {
 
         return &data[slot.index];
     }
-    [[nodiscard]] auto get_ptr(SlotMapKey key) const noexcept -> const T * {
+    [[nodiscard]] const T * get_ptr(SlotMapKey key) const noexcept {
         size_t index = key.index;
         if (index >= slots.len) return nullptr;
 
@@ -166,7 +177,7 @@ struct SlotMap {
         return &data[slot.index];
     }
 
-    [[nodiscard]] auto has(SlotMapKey key) const noexcept -> bool {
+    [[nodiscard]] bool has(SlotMapKey key) const noexcept {
         size_t index = key.index;
         if (index >= slots.len) return false;
 
@@ -176,8 +187,8 @@ struct SlotMap {
         return true;
     }
 
-    auto clear() noexcept {
-        handle_clear_data();
+    void clear() noexcept {
+        _handle_clear_data();
 
         for (size_t i = 0; i < slots.len; i++) {
             SlotMapKey *slot_ptr = slots.get_ptr(i);
@@ -187,30 +198,32 @@ struct SlotMap {
         next_slot_index = 0;
     }
 
-    auto reserve(size_t cap) noexcept {
-        handle_reserve_data(cap);
+    void reserve(size_t cap) noexcept {
+        _handle_reserve_data(cap);
         slots.reserve(cap);
     }
 
-    [[nodiscard]] auto empty() const noexcept { return len == 0; }
+    [[nodiscard]] bool empty() const noexcept { return len == 0; }
 
     using iterator = T *;
     using const_iterator = const T *;
 
-    auto begin() -> iterator { return data; }
-    auto end() -> iterator { return data + len; }
-    auto begin() const -> const_iterator { return data; }
-    auto end() const -> const_iterator { return data + len; }
-    auto cbegin() const -> const_iterator { return data; }
-    auto cend() const -> const_iterator { return data + len; }
+    iterator begin() { return data; }
+    iterator end() { return data + len; }
+    const_iterator begin() const { return data; }
+    const_iterator end() const { return data + len; }
+    const_iterator cbegin() const { return data; }
+    const_iterator cend() const { return data + len; }
 
-private:
-    auto handle_reserve_data(size_t new_cap) noexcept {
+    // =========================================================================
+    void _handle_reserve_data(size_t new_cap) noexcept {
         if (new_cap <= cap) return;
 
         auto slot_alloc = slots.allocator;
-        using t_allloc_t = typename std::allocator_traits<slot_allocator_t>::template rebind_alloc<T>;
-        using size_alloc_t = typename std::allocator_traits<slot_allocator_t>::template rebind_alloc<size_t>;
+        using t_allloc_t = 
+            typename std::allocator_traits<slot_allocator_t>::template rebind_alloc<T>;
+        using size_alloc_t = 
+            typename std::allocator_traits<slot_allocator_t>::template rebind_alloc<size_t>;
 
         using t_alloc_traits_t = std::allocator_traits<t_allloc_t>;
         t_allloc_t t_alloc(slot_alloc);
@@ -235,10 +248,10 @@ private:
         cap = new_cap;
     }
 
-    auto handle_append_data(const T &val, size_t slot_index) noexcept {
+    void _handle_append_data(const T &val, size_t slot_index) noexcept {
         if (len + 1 > cap) {
             size_t new_cap = cap < 4 ? 4 : cap + (cap / 2);
-            handle_reserve_data(new_cap);
+            _handle_reserve_data(new_cap);
         }
 
         data[len] = val;
@@ -246,8 +259,8 @@ private:
         ++len;
     }
 
-    auto handle_pop_data() noexcept { --len; }
-    auto handle_clear_data() noexcept { len = 0; }
+    void _handle_pop_data() noexcept { --len; }
+    void _handle_clear_data() noexcept { len = 0; }
 };
 
-} // namespace cactus
+} // namespace cact

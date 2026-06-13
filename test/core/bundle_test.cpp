@@ -1,7 +1,7 @@
 import std;
-import cactus;
+import cact;
 
-using namespace cactus;
+using namespace cact;
 
 int main() {
     SpinesDocument a = SpinesDocument::make();

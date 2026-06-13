@@ -1,11 +1,11 @@
 module;
 
-export module cactus.core.ecs:utils;
+export module cact.core.ecs:utils;
 
 import :defines;
-import cactus.common;
+import cact.common;
 
-namespace cactus::detail::ecs {
+namespace cact::detail::ecs {
 
 export [[nodiscard]] constexpr auto align_up(size_t offset, size_t align) noexcept -> size_t {
     return (offset + align - 1) & ~(align - 1);
@@ -42,4 +42,4 @@ struct WorldComponentUtilities {
     }
 };
 
-} // namespace cactus::detail::ecs
+} // namespace cact::detail::ecs

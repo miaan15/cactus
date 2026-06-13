@@ -1,5 +1,5 @@
-export module cactus;
+export module cact;
 
-export import cactus.common;
-export import cactus.core;
-export import cactus.input;
+export import cact.common;
+export import cact.core;
+export import cact.input;

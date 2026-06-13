@@ -1,11 +1,11 @@
 module;
 
-export module cactus.core.spines:document;
+export module cact.core.spines:document;
 
-import cactus.common;
-import cactus.core.strat;
+import cact.common;
+import cact.core.strat;
 
-namespace cactus {
+namespace cact {
 
 export enum TokenType : int { IDENTIFIER = 256, NUMBER, STRING };
 
@@ -630,4 +630,4 @@ public:
     }
 };
 
-} // namespace cactus
+} // namespace cact

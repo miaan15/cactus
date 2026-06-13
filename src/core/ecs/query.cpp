@@ -1,15 +1,15 @@
 module;
 
-export module cactus.core.ecs:query;
+export module cact.core.ecs:query;
 
 import :defines;
 import :table;
-import cactus.common;
-import cactus.core.strat;
+import cact.common;
+import cact.core.strat;
 
-namespace cactus {
+namespace cact {
 
-using namespace cactus::detail::ecs;
+using namespace cact::detail::ecs;
 
 export template <typename... Ts> struct WorldQuery {
     using world_t = World<Ts...>;
@@ -146,4 +146,4 @@ export template <typename... Ts> struct WorldQueryBuilder {
     [[nodiscard]] auto build() const -> WorldQuery<Ts...> { return WorldQuery<Ts...>(world_ref, signature); }
 };
 
-} // namespace cactus
+} // namespace cact

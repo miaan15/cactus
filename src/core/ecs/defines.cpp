@@ -1,11 +1,11 @@
 module;
 
-export module cactus.core.ecs:defines;
+export module cact.core.ecs:defines;
 
-import cactus.common;
-import cactus.core.strat;
+import cact.common;
+import cact.core.strat;
 
-namespace cactus {
+namespace cact {
 
 export constexpr size_t MAX_WORLD_COMPONENTS_COUNT = 32;
 
@@ -24,4 +24,4 @@ export template <typename... Ts>
     requires(std::is_trivially_copyable_v<Ts> && ...)
 struct World;
 
-} // namespace cactus
+} // namespace cact

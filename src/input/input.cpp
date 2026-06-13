@@ -1,16 +1,16 @@
 module;
 
-export module cactus.input;
+export module cact.input;
 
 export import :define;
 
 import sdl;
 import std;
 import glm;
-import cactus.common;
-import cactus.core.strat;
+import cact.common;
+import cact.core.strat;
 
-namespace cactus {
+namespace cact {
 
 const bool *keyboard_state;
 auto key_state(Scancode key) noexcept -> bool {
@@ -127,4 +127,4 @@ export struct InputAction {
     }
 };
 
-} // namespace cactus
+} // namespace cact

@@ -2,9 +2,9 @@ module;
 
 #include <SDL3/SDL_scancode.h>
 
-export module cactus.input:define;
+export module cact.input:define;
 
-namespace cactus {
+namespace cact {
 
 export enum struct Scancode {
     UNKNOWN = SDL_SCANCODE_UNKNOWN,
@@ -130,4 +130,4 @@ export enum struct Scancode {
     RGUI = SDL_SCANCODE_RGUI,
 };
 
-}
+} // namespace cact

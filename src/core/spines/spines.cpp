@@ -1,5 +1,5 @@
 module;
 
-export module cactus.core.spines;
+export module cact.core.spines;
 
 export import :document;

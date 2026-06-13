@@ -2,11 +2,11 @@ module;
 
 #include <cassert>
 
-export module cactus.core.strat:assert;
+export module cact.core.strat:assert;
 
 import std;
 
-namespace cactus {
+namespace cact {
 
 export auto _assert(bool statement, const char *message, const std::source_location location = std::source_location::current())
     -> void {
@@ -23,4 +23,4 @@ export auto _assert(bool statement, const char *message, const std::source_locat
 #endif
 }
 
-} // namespace cactus
+} // namespace cact

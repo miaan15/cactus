@@ -1,43 +1,67 @@
 module;
 
-export module cactus.core.strat:fixed_array;
+export module cact.core.strat:fixed_array;
 
 import std;
 
 using size_t = std::size_t;
 
-namespace cactus {
+namespace cact {
 
-export template <typename T, typename Alloc = std::allocator<T>> struct FixedArray {
+export template <typename T, typename Alloc = std::allocator<T>> \
+struct FixedArray {
     using alloc_traits_t = std::allocator_traits<Alloc>;
 
+    // =========================================================================
     T *data = nullptr;
     size_t len = 0;
 
     [[no_unique_address]] Alloc allocator = Alloc();
 
-    [[nodiscard]] static auto make(size_t len) noexcept -> FixedArray {
+    // =========================================================================
+    [[nodiscard]] static FixedArray make(size_t len) noexcept {
         Alloc allocator = Alloc();
         T *data = alloc_traits_t::allocate(allocator, len);
+
         std::memset(data, 0, len * sizeof(T));
-        return FixedArray{.data = data, .len = len, .allocator = allocator};
+
+        return FixedArray{ 
+            .data = data, 
+            .len = len,
+            .allocator = allocator};
     }
-    auto destroy() noexcept {
+
+    void destroy() noexcept {
         if (data) alloc_traits_t::deallocate(allocator, data, len);
     }
-    [[nodiscard]] auto clone() const noexcept -> FixedArray {
+
+    [[nodiscard]] FixedArray clone() const noexcept {
         Alloc new_allocator = Alloc(allocator);
         T *new_data = alloc_traits_t::allocate(new_allocator, len);
+
         std::memcpy(new_data, data, len * sizeof(T));
-        return FixedArray{.data = new_data, .len = len, .allocator = new_allocator};
+
+        return FixedArray{
+            .data = new_data,
+            .len = len,
+            .allocator = new_allocator};
     }
 
-    auto remake(size_t new_len) noexcept -> void {
+    void relinquish() noexcept {
+        data = nullptr;
+        len = 0;
+    }
+
+    // =========================================================================
+    void remake(size_t new_len) noexcept {
         size_t copy_len = new_len < len ? new_len : len;
         T *new_data = alloc_traits_t::allocate(allocator, new_len);
+
         std::memcpy(new_data, data, copy_len * sizeof(T));
 
-        if (new_len > len) { std::memset(new_data + len, 0, (new_len - len) * sizeof(T)); }
+        if (new_len > len) { 
+            std::memset(new_data + len, 0, (new_len - len) * sizeof(T)); 
+        }
 
         if (data) alloc_traits_t::deallocate(allocator, data, len);
 
@@ -45,22 +69,22 @@ export template <typename T, typename Alloc = std::allocator<T>> struct FixedArr
         len = new_len;
     }
 
-    auto set(size_t index, const T &val) noexcept -> bool {
+    bool set(size_t index, const T &val) noexcept {
         if (index >= len) return false;
         data[index] = val;
         return true;
     }
 
-    [[nodiscard]] auto get(size_t index) const -> std::optional<T> {
+    [[nodiscard]] std::optional<T> get(size_t index) const noexcept {
         if (index >= len) return {};
         return data[index];
     }
 
-    [[nodiscard]] auto get_ptr(size_t index) -> T * {
+    [[nodiscard]] T * get_ptr(size_t index) noexcept {
         if (index >= len) return {};
         return &data[index];
     }
-    [[nodiscard]] auto get_ptr(size_t index) const -> const T * {
+    [[nodiscard]] const T * get_ptr(size_t index) const noexcept {
         if (index >= len) return {};
         return &data[index];
     }
@@ -68,12 +92,12 @@ export template <typename T, typename Alloc = std::allocator<T>> struct FixedArr
     using iterator = T *;
     using const_iterator = const T *;
 
-    auto begin() -> iterator { return data; }
-    auto end() -> iterator { return data + len; }
-    auto begin() const -> const_iterator { return data; }
-    auto end() const -> const_iterator { return data + len; }
-    auto cbegin() const -> const_iterator { return data; }
-    auto cend() const -> const_iterator { return data + len; }
+    iterator begin() { return data; }
+    iterator end() { return data + len; }
+    const_iterator begin() const { return data; }
+    const_iterator end() const { return data + len; }
+    const_iterator cbegin() const { return data; }
+    const_iterator cend() const { return data + len; }
 };
 
-} // namespace cactus
+} // namespace cact

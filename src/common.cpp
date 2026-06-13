@@ -1,6 +1,6 @@
 module;
 
-export module cactus.common;
+export module cact.common;
 
 export import std;
 
@@ -22,9 +22,9 @@ export using u32 = std::uint32_t;
 export using u64 = std::uint64_t;
 export using uptr = std::uintptr_t;
 
-namespace cactus {
+namespace cact {
 
 export const stdf::path _root_dir = stdf::path{__FILE__}.parent_path() / "..";
 export const stdf::path _src_dir = _root_dir / "src";
 
-} // namespace cactus
+} // namespace cact

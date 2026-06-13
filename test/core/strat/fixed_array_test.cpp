@@ -1,6 +1,6 @@
 import cactus_test;
-import cactus;
+import cact;
 
-using namespace cactus;
+using namespace cact;
 
 int main() {} // TODO

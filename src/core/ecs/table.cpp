@@ -1,13 +1,13 @@
 module;
 
-export module cactus.core.ecs:table;
+export module cact.core.ecs:table;
 
 import :defines;
 import :utils;
-import cactus.common;
-import cactus.core.strat;
+import cact.common;
+import cact.core.strat;
 
-namespace cactus::detail::ecs {
+namespace cact::detail::ecs {
 
 export struct Table {
     char *table_raw = nullptr;
@@ -130,4 +130,4 @@ export struct Table {
     }
 };
 
-} // namespace cactus::detail::ecs
+} // namespace cact::detail::ecs

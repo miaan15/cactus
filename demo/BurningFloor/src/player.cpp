@@ -39,7 +39,7 @@ const stdf::path player_data_path = asset_dir / "data/player.txt";
 
 SDL_Texture *player_texture = nullptr;
 
-cactus::DynamicArray<PlayerSprite> player_sprites = cactus::DynamicArray<PlayerSprite>::make();
+cact::DynamicArray<PlayerSprite> player_sprites = cact::DynamicArray<PlayerSprite>::make();
 
 PlayerData player_data{};
 PlayerParams player_params{};
@@ -73,7 +73,7 @@ auto handle_player_init(SDL_Renderer *renderer) {
     player_sprites.append(PlayerSprite{.src_rect = {160, 0, 32, 32}});
 
     // Data
-    auto player_doc = cactus::SpinesDocument::make();
+    auto player_doc = cact::SpinesDocument::make();
     player_doc.parse(player_data_path);
 
     player_data.move_speed = player_doc.pick("move_speed").as<int>()

@@ -1,6 +1,6 @@
 module;
 
-export module cactus.core.ecs;
+export module cact.core.ecs;
 
 export import :defines;
 export import :utils;

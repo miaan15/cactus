@@ -1,17 +1,17 @@
 module;
 
-export module cactus.core.ecs:world;
+export module cact.core.ecs:world;
 
 import :defines;
 import :utils;
 import :table;
 import :query;
-import cactus.common;
-import cactus.core.strat;
+import cact.common;
+import cact.core.strat;
 
-namespace cactus {
+namespace cact {
 
-using namespace cactus::detail::ecs;
+using namespace cact::detail::ecs;
 
 export template <typename... Ts>
     requires(std::is_trivially_copyable_v<Ts> && ...)
@@ -434,4 +434,4 @@ private:
     }
 };
 
-} // namespace cactus
+} // namespace cact
