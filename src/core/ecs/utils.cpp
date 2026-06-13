@@ -2,39 +2,41 @@ module;
 
 export module cact.core.ecs:utils;
 
-import :defines;
 import cact.common;
 
-namespace cact::detail::ecs {
+export namespace cact::detail::ecs {
 
-export [[nodiscard]] constexpr auto align_up(size_t offset, size_t align) noexcept -> size_t {
+[[nodiscard]] constexpr size_t align_up(size_t offset, size_t align) noexcept {
     return (offset + align - 1) & ~(align - 1);
 }
 
-export template <typename... Ts>
-    requires(sizeof...(Ts) <= MAX_WORLD_COMPONENTS_COUNT && sizeof...(Ts) > 0)
+template <typename... Ts>
 struct WorldComponentUtilities {
-    [[nodiscard]] static constexpr auto count() noexcept -> size_t { return sizeof...(Ts); }
+    [[nodiscard]] constexpr
+    static size_t count() noexcept { return sizeof...(Ts); }
 
-    template <typename T> [[nodiscard]] static constexpr auto has() noexcept -> bool { return (std::is_same_v<T, Ts> || ...); }
-    template <typename T> [[nodiscard]] static constexpr auto get_index() noexcept -> size_t {
+    template <typename T> [[nodiscard]] constexpr static bool has() noexcept {
+        return (std::is_same_v<T, Ts> || ...);
+    }
+    template <typename T> [[nodiscard]] constexpr static size_t get_index() noexcept {
         size_t i = 0, res = 0;
         (void)((std::is_same_v<T, Ts> ? (res = i, false) : (++i, true)) && ...);
         return res;
     }
 
-    template <size_t I> using component_at_t = typename std::tuple_element<I, std::tuple<Ts...>>::type;
+    template <size_t I> using component_at_t =
+        typename std::tuple_element<I, std::tuple<Ts...>>::type;
 
-    template <size_t I> [[nodiscard]] static constexpr auto get_size() noexcept -> size_t {
+    template <size_t I> [[nodiscard]] constexpr static size_t get_size() noexcept {
         static_assert(I < sizeof...(Ts), "Component index out of bounds");
         return sizeof(component_at_t<I>);
     }
-    template <size_t I> [[nodiscard]] static constexpr auto get_align() noexcept -> size_t {
+    template <size_t I> [[nodiscard]] constexpr static size_t get_align() noexcept {
         static_assert(I < sizeof...(Ts), "Component index out of bounds");
         return alignof(component_at_t<I>);
     }
 
-    [[nodiscard]] static constexpr auto get_total_size() noexcept -> size_t {
+    [[nodiscard]] constexpr static size_t get_total_size() noexcept {
         size_t res = 0;
         size_t max_align = 1;
         (..., (max_align = std::max(max_align, alignof(Ts)), res = align_up(res, alignof(Ts)) + sizeof(Ts)));
