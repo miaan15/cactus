@@ -104,8 +104,12 @@ int main() {
 
 void logic_update() {
     handle_player_logic_update(cur_time_sec);
+
+    handle_enemies_logic_update(player_params);
 }
 
 void frame_update() {
     handle_player_frame_update();
+
+    handle_enemies_frame_update();
 }

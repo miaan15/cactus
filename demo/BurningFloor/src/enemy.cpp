@@ -7,11 +7,19 @@ import burningfloor.player;
 
 export namespace bf {
 
+cact::DynamicArray<SDL_Texture *> enemy_texture_list =
+    cact::DynamicArray<SDL_Texture *>::make();
+
+// ============================================================================
 struct EnemySprite {
     size_t texture_index;
     SDL_FRect rect;
 };
 
+cact::DynamicArray<EnemySprite> enemy_sprite_list =
+    cact::DynamicArray<EnemySprite>::make();
+
+// ============================================================================
 struct EnemyRenderData {
     SDL_Texture *texture;
     SDL_FRect src_rect;
@@ -19,34 +27,34 @@ struct EnemyRenderData {
     SDL_FlipMode flip = SDL_FlipMode::SDL_FLIP_NONE;
 };
 
-cact::DynamicArray<SDL_Texture *> enemy_texture_list =
-    cact::DynamicArray<SDL_Texture *>::make();
+// ============================================================================
 
-cact::DynamicArray<EnemySprite> enemy_sprite_list =
-    cact::DynamicArray<EnemySprite>::make();
+struct DummyData {
+    float health;
+    float move_speed;
+};
+DummyData dummy_data{};
 
 struct DummyParams {
     float health;
     glm::vec2 pos;
 };
 
-struct DummyData {
-    float health;
-    float move_speed;
-};
-
-enum EnemyEntityType {
-    ENEMY_T_DUMMY,
+// ============================================================================
+enum struct EnemyType {
+    DUMMY,
 };
 struct EnemyEntity {
-    EnemyEntityType type;
+    EnemyType type;
     EnemyRenderData render_data;
     union {
         DummyParams dummy_params;
     };
 };
 
-DummyData dummy_data{};
+// ============================================================================
+// TODO
+constexpr size_t DUMMY_SPRITE_INDEX = 0;
 
 cact::DynamicArray<EnemyEntity> enemy_entity_list =
     cact::DynamicArray<EnemyEntity>::make();
@@ -67,6 +75,7 @@ void handle_enemies_init(SDL_Renderer *renderer) {
     if (dummy_surface) {
         auto texture = SDL_CreateTextureFromSurface(renderer, dummy_surface);
         if (!texture) handle_fail_texture(dummy_tex_path);
+        SDL_SetTextureScaleMode(texture, SDL_ScaleMode::SDL_SCALEMODE_NEAREST);
 
         enemy_texture_list.append(texture);
 
@@ -90,18 +99,18 @@ void handle_enemies_init(SDL_Renderer *renderer) {
     };
 
     const stdf::path enemy_data_path = asset_dir / "data/enemy.txt";
-    auto enemy_doc = cact::SpinesContext::make();
-    enemy_doc.parse(enemy_data_path);
+    auto enemy_data_context = cact::SpinesContext::make();
+    enemy_data_context.parse(enemy_data_path);
 
     // Dummy data
-    dummy_data.health = enemy_doc.pick("dummy").pick("health").as<float>()
+    dummy_data.health = enemy_data_context.pick("dummy").pick("health").as<float>()
         .transform_error(handle_fail_get_data("dummy.health"))
         .value_or(0);
-    dummy_data.move_speed = enemy_doc.pick("dummy").pick("move_speed").as<float>()
+    dummy_data.move_speed = enemy_data_context.pick("dummy").pick("move_speed").as<float>()
         .transform_error(handle_fail_get_data("dummy.move_speed"))
         .value_or(0);
 
-    enemy_doc.destroy();
+    enemy_data_context.destroy();
 
     std::cout << "dummy data: " << "\n";
     std::cout << "+ health:\t" << dummy_data.health << "\n";
@@ -110,7 +119,7 @@ void handle_enemies_init(SDL_Renderer *renderer) {
     // TEST
     // ========================================================================
     enemy_entity_list.append(EnemyEntity{
-        ENEMY_T_DUMMY,
+        EnemyType::DUMMY,
         {},
         DummyParams{
             .health = dummy_data.health,
@@ -121,17 +130,34 @@ void handle_enemies_init(SDL_Renderer *renderer) {
 void dummy_logic_update(DummyParams *dummy_params, const PlayerParams &player_params) {
     glm::vec2 dir = player_params.pos - dummy_params->pos;
     dir = glm::normalize(dir);
+
+    dummy_params->pos += dir * dummy_data.move_speed * 0.02f;
 }
 
-void handle_enemies_logic_update() {
+void handle_enemies_logic_update(const PlayerParams &player_params) {
+    for (auto &enemy_entity : enemy_entity_list) {
+        switch (enemy_entity.type) {
+        case EnemyType::DUMMY: {
+            DummyParams *params = &enemy_entity.dummy_params;
+            dummy_logic_update(params, player_params);
+        } break;
+        }
+    }
 }
 
 void handle_enemies_frame_update() {
     for (auto &enemy_entity : enemy_entity_list) {
         EnemyRenderData *render_data = &enemy_entity.render_data;
         switch (enemy_entity.type) {
-        case ENEMY_T_DUMMY: {
-
+        case EnemyType::DUMMY: {
+            DummyParams params = enemy_entity.dummy_params;
+            EnemySprite sprite = enemy_sprite_list.get(DUMMY_SPRITE_INDEX).value();
+            render_data->texture =
+                enemy_texture_list.get(sprite.texture_index).value();
+            render_data->src_rect = sprite.rect;
+            render_data->dest_rect = {
+                params.pos.x, 720.0f - params.pos.y, 128.0f, 128.0f };
+            render_data->flip = SDL_FlipMode::SDL_FLIP_NONE;
         } break;
         }
     }

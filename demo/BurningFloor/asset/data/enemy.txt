@@ -1,4 +1,4 @@
 dummy {
     health = 100
-    move_speed = 5
+    move_speed = 100
 }
