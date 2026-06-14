@@ -2,4 +2,4 @@ module;
 
 export module cactus.core.spines;
 
-export import :document;
+export import :context;

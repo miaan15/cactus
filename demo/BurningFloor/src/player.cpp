@@ -73,7 +73,7 @@ auto handle_player_init(SDL_Renderer *renderer) {
     player_sprites.append(PlayerSprite{.src_rect = {160, 0, 32, 32}});
 
     // Data
-    auto player_doc = cact::SpinesDocument::make();
+    auto player_doc = cact::SpinesContext::make();
     player_doc.parse(player_data_path);
 
     player_data.move_speed = player_doc.pick("move_speed").as<int>()

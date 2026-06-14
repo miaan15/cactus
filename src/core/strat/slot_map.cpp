@@ -22,7 +22,7 @@ export template <typename T, typename Alloc = std::allocator<T>>
 requires std::is_trivially_copyable_v<T>
 struct SlotMap {
     using allocator_traits_t = std::allocator_traits<Alloc>;
-    using slot_allocator_t = typename allocator_traits_t::template rebind_alloc<SlotMapKey>;
+    using slot_allocator_t = allocator_traits_t::template rebind_alloc<SlotMapKey>;
     using slot_container_t = DynamicArray<SlotMapKey, slot_allocator_t>;
 
     // =========================================================================
@@ -43,8 +43,7 @@ struct SlotMap {
         auto slot_alloc = slots.allocator;
 
         if (data) {
-            using T_alloc_t = 
-                typename std::allocator_traits<slot_allocator_t>::template rebind_alloc<T>;
+            using T_alloc_t = std::allocator_traits<slot_allocator_t>::template rebind_alloc<T>;
             using T_alloc_traits_t = std::allocator_traits<T_alloc_t>;
             T_alloc_t t_alloc{slot_alloc};
             T_alloc_traits_t::deallocate(t_alloc, data, cap);
@@ -52,7 +51,7 @@ struct SlotMap {
         }
 
         if (slot_indexes) {
-            using size_alloc_t = typename std::allocator_traits<slot_allocator_t>::template rebind_alloc<size_t>;
+            using size_alloc_t = std::allocator_traits<slot_allocator_t>::template rebind_alloc<size_t>;
             using size_alloc_traits_t = std::allocator_traits<size_alloc_t>;
             size_alloc_t size_alloc{slot_alloc};
             size_alloc_traits_t::deallocate(size_alloc, slot_indexes, cap);
@@ -68,15 +67,13 @@ struct SlotMap {
         auto new_slots = slots.clone();
         auto new_slot_alloc = new_slots.allocator;
 
-        using T_alloc_t = 
-            typename std::allocator_traits<slot_allocator_t>::template rebind_alloc<T>;
+        using T_alloc_t = std::allocator_traits<slot_allocator_t>::template rebind_alloc<T>;
         using T_alloc_traits_t = std::allocator_traits<T_alloc_t>;
         T_alloc_t t_alloc{new_slot_alloc};
         T *new_data = T_alloc_traits_t::allocate(t_alloc, cap);
         std::memcpy(new_data, data, cap * sizeof(T));
 
-        using size_alloc_t = 
-            typename std::allocator_traits<slot_allocator_t>::template rebind_alloc<T>;
+        using size_alloc_t = std::allocator_traits<slot_allocator_t>::template rebind_alloc<T>;
         using size_alloc_traits_t = std::allocator_traits<size_alloc_t>;
         size_alloc_t size_alloc{new_slot_alloc};
         size_t *new_slot_indexes = size_alloc_traits_t::allocate(size_alloc, cap);
@@ -220,10 +217,8 @@ struct SlotMap {
         if (new_cap <= cap) return;
 
         auto slot_alloc = slots.allocator;
-        using t_allloc_t = 
-            typename std::allocator_traits<slot_allocator_t>::template rebind_alloc<T>;
-        using size_alloc_t = 
-            typename std::allocator_traits<slot_allocator_t>::template rebind_alloc<size_t>;
+        using t_allloc_t = std::allocator_traits<slot_allocator_t>::template rebind_alloc<T>;
+        using size_alloc_t = std::allocator_traits<slot_allocator_t>::template rebind_alloc<size_t>;
 
         using t_alloc_traits_t = std::allocator_traits<t_allloc_t>;
         t_allloc_t t_alloc(slot_alloc);

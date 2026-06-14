@@ -87,10 +87,10 @@ struct HashMap {
         _assert((new_cap & (new_cap - 1)) == 0, "HashMap rehash(): new_cap must be a power of two");
 
         slot_t *new_slots = alloc_traits_t::allocate(allocator, new_cap);
-        if (!new_slots) _assert(false, "HashMap failed to allocate memory");
+        _assert(new_slots, "HashMap failed to allocate memory");
         SlotState *new_states =
             state_alloc_traits_t::allocate(state_allocator, new_cap);
-        if (!new_states) _assert(false, "HashMap failed to allocate memory");
+        _assert(new_states, "HashMap failed to allocate memory");
         std::memset(new_states, EMPTY, new_cap * sizeof(SlotState));
 
         if (slots) {
@@ -121,7 +121,7 @@ struct HashMap {
     bool add(const K &key, const V &value) noexcept {
         if ((len + deleted_count) * 10 >= cap * 7) { rehash(cap < 8 ? 8 : cap * 2); }
 
-        constexpr size_t EMPTY_DELETED_I = static_cast<size_t>(-1);
+        constexpr auto EMPTY_DELETED_I = static_cast<size_t>(-1);
         size_t hash = Hash{}(key);
         size_t index = hash & (cap - 1);
         size_t first_deleted = EMPTY_DELETED_I;
@@ -149,7 +149,7 @@ struct HashMap {
     bool add(K &&key, const V &value) noexcept {
         if ((len + deleted_count) * 10 >= cap * 7) { rehash(cap < 8 ? 8 : cap * 2); }
 
-        constexpr size_t EMPTY_DELETED_I = static_cast<size_t>(-1);
+        constexpr auto EMPTY_DELETED_I = static_cast<size_t>(-1);
         size_t hash = Hash{}(key);
         size_t index = hash & (cap - 1);
         size_t first_deleted = EMPTY_DELETED_I;
@@ -178,10 +178,8 @@ struct HashMap {
     bool set(const K &key, const V &value) noexcept {
         if ((len + deleted_count) * 10 >= cap * 7) { rehash(cap < 8 ? 8 : cap * 2); }
 
-        constexpr size_t EMPTY_DELETED_I = static_cast<size_t>(-1);
         size_t hash = Hash{}(key);
         size_t index = hash & (cap - 1);
-        size_t first_deleted = EMPTY_DELETED_I;
 
         while (states[index] != EMPTY) {
             if (states[index] == OCCUPIED && KeyEqual{}(slots[index].first, key)) {
@@ -195,10 +193,8 @@ struct HashMap {
     bool set(K &&key, const V &value) noexcept {
         if ((len + deleted_count) * 10 >= cap * 7) { rehash(cap < 8 ? 8 : cap * 2); }
 
-        constexpr size_t EMPTY_DELETED_I = static_cast<size_t>(-1);
         size_t hash = Hash{}(key);
         size_t index = hash & (cap - 1);
-        size_t first_deleted = EMPTY_DELETED_I;
 
         while (states[index] != EMPTY) {
             if (states[index] == OCCUPIED && KeyEqual{}(slots[index].first, key)) {
@@ -213,7 +209,7 @@ struct HashMap {
     void add_or_set(const K &key, const V &value) noexcept {
         if ((len + deleted_count) * 10 >= cap * 7) { rehash(cap < 8 ? 8 : cap * 2); }
 
-        constexpr size_t EMPTY_DELETED_I = static_cast<size_t>(-1);
+        constexpr auto EMPTY_DELETED_I = static_cast<size_t>(-1);
         size_t hash = Hash{}(key);
         size_t index = hash & (cap - 1);
         size_t first_deleted = EMPTY_DELETED_I;
@@ -240,7 +236,7 @@ struct HashMap {
     void add_or_set(K &&key, const V &value) noexcept {
         if ((len + deleted_count) * 10 >= cap * 7) { rehash(cap < 8 ? 8 : cap * 2); }
 
-        constexpr size_t EMPTY_DELETED_I = static_cast<size_t>(-1);
+        constexpr auto EMPTY_DELETED_I = static_cast<size_t>(-1);
         size_t hash = Hash{}(key);
         size_t index = hash & (cap - 1);
         size_t first_deleted = EMPTY_DELETED_I;
@@ -327,7 +323,7 @@ struct HashMap {
     [[nodiscard]] V * get_or_add_ptr(const K &key) noexcept {
         if ((len + deleted_count) * 10 >= cap * 7) { rehash(cap < 8 ? 8 : cap * 2); }
 
-        constexpr size_t EMPTY_DELETED_I = static_cast<size_t>(-1);
+        constexpr auto EMPTY_DELETED_I = static_cast<size_t>(-1);
         size_t hash = Hash{}(key);
         size_t index = hash & (cap - 1);
         size_t first_deleted = EMPTY_DELETED_I;
@@ -355,7 +351,7 @@ struct HashMap {
     [[nodiscard]] V * get_or_add_ptr(K &&key) noexcept {
         if ((len + deleted_count) * 10 >= cap * 7) { rehash(cap < 8 ? 8 : cap * 2); }
 
-        constexpr size_t EMPTY_DELETED_I = static_cast<size_t>(-1);
+        constexpr auto EMPTY_DELETED_I = static_cast<size_t>(-1);
         size_t hash = Hash{}(key);
         size_t index = hash & (cap - 1);
         size_t first_deleted = EMPTY_DELETED_I;

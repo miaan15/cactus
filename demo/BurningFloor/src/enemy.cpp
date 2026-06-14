@@ -90,7 +90,7 @@ void handle_enemies_init(SDL_Renderer *renderer) {
     };
 
     const stdf::path enemy_data_path = asset_dir / "data/enemy.txt";
-    auto enemy_doc = cact::SpinesDocument::make();
+    auto enemy_doc = cact::SpinesContext::make();
     enemy_doc.parse(enemy_data_path);
 
     // Dummy data

@@ -13,7 +13,7 @@ import cactus.core.strat;
 namespace cact {
 
 const bool *keyboard_state;
-auto key_state(Scancode key) noexcept -> bool {
+bool key_state(Scancode key) noexcept {
     return keyboard_state[(SDL_Scancode)key];
 }
 
@@ -49,7 +49,7 @@ export struct UDLRInputBindingMethod {
     Scancode left_key;
     Scancode right_key;
 
-    auto apply_to(InputActionData *data) const noexcept {
+    void apply_to(InputActionData *data) const noexcept {
         glm::vec2 v{};
         std::memcpy(&v, data, sizeof(glm::vec2));
 
@@ -63,10 +63,10 @@ export struct UDLRInputBindingMethod {
         std::memcpy(data, &v, sizeof(glm::vec2));
     }
 
-    [[nodiscard]] static auto make_use_arrows() noexcept -> UDLRInputBindingMethod {
+    [[nodiscard]] static UDLRInputBindingMethod make_use_arrows() noexcept {
         return UDLRInputBindingMethod{Scancode::UP, Scancode::DOWN, Scancode::LEFT, Scancode::RIGHT};
     }
-    [[nodiscard]] static auto make_use_wasd() noexcept -> UDLRInputBindingMethod {
+    [[nodiscard]] static UDLRInputBindingMethod make_use_wasd() noexcept {
         return UDLRInputBindingMethod{Scancode::W, Scancode::S, Scancode::A, Scancode::D};
     }
 };
@@ -84,19 +84,19 @@ export struct InputAction {
     InputActionData last_data{};
     DynamicArray<InputBindingMethod> methods = DynamicArray<InputBindingMethod>::make();
 
-    [[nodiscard]] static auto make() noexcept -> InputAction { return InputAction{}; }
-    auto destroy() noexcept {
+    [[nodiscard]] static InputAction make() noexcept { return InputAction{}; }
+    void destroy() noexcept {
         methods.destroy();
     }
-    [[nodiscard]] auto clone() const noexcept -> InputAction = delete; // TODO
+    [[nodiscard]] InputAction clone() const noexcept = delete; // TODO
 
-    auto add_binding_method(InputBindingMethod &&method) noexcept {
+    void add_binding_method(InputBindingMethod &&method) noexcept {
         methods.append(std::move(method));
     }
 
     template <typename T>
         requires(sizeof(T) <= sizeof(InputActionData))
-    [[nodiscard]] auto as() noexcept -> T {
+    [[nodiscard]] T as() noexcept {
         T result{};
         std::memcpy(&result, &data, sizeof(T));
         return result;
@@ -104,13 +104,13 @@ export struct InputAction {
 
     template <typename T>
         requires(sizeof(T) <= sizeof(InputActionData))
-    [[nodiscard]] auto last_as() noexcept -> T {
+    [[nodiscard]] T last_as() noexcept {
         T result{};
         std::memcpy(&result, &last_data, sizeof(T));
         return result;
     }
 
-    auto receive_inputs() noexcept {
+    void receive_inputs() noexcept {
         keyboard_state = SDL_GetKeyboardState(nullptr);
 
         for (const auto &method : methods) {
@@ -121,7 +121,7 @@ export struct InputAction {
         }
     }
 
-    auto reset() noexcept {
+    void reset() noexcept {
         std::memcpy(&last_data, &data, sizeof(InputActionData));
         std::memset(&data, 0, sizeof(InputActionData));
     }

@@ -4,7 +4,7 @@ import cactus;
 using namespace cact;
 
 int main() {
-    SpinesDocument a = SpinesDocument::make();
+    SpinesContext a = SpinesContext::make();
     auto parse_err = a.parse("test/core/idk.bundle");
     if (!parse_err.has_value()) {
         std::println("CRITICAL: Failed to parse document! Error Code: {}", (int)parse_err.error().type);
