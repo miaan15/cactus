@@ -33,7 +33,7 @@ concept InputBindingMethodConcept = requires(T b, InputActionData *data) {
 export struct ButtonInputBindingMethod {
     Scancode key;
 
-    auto apply_to(InputActionData *data) const noexcept {
+    void apply_to(InputActionData *data) const noexcept {
         bool v{};
         std::memcpy(&v, data, sizeof(bool));
 
