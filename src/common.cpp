@@ -1,6 +1,6 @@
 module;
 
-export module cact.common;
+export module cactus.common;
 
 export import std;
 

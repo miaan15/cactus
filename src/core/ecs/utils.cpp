@@ -1,8 +1,8 @@
 module;
 
-export module cact.core.ecs:utils;
+export module cactus.core.ecs:utils;
 
-import cact.common;
+import cactus.common;
 
 export namespace cact::detail::ecs {
 

@@ -2,7 +2,7 @@ module;
 
 export module burningfloor.common;
 
-export import cact;
+export import cactus;
 export import sdl;
 export import std;
 export import glm;

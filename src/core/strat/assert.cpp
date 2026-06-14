@@ -2,7 +2,7 @@ module;
 
 #include <cassert>
 
-export module cact.core.strat:assert;
+export module cactus.core.strat:assert;
 
 import std;
 

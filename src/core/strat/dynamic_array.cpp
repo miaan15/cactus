@@ -1,6 +1,6 @@
 module;
 
-export module cact.core.strat:dynamic_array;
+export module cactus.core.strat:dynamic_array;
 
 import std;
 import :assert;

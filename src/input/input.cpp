@@ -1,14 +1,14 @@
 module;
 
-export module cact.input;
+export module cactus.input;
 
 export import :define;
 
 import sdl;
 import std;
 import glm;
-import cact.common;
-import cact.core.strat;
+import cactus.common;
+import cactus.core.strat;
 
 namespace cact {
 

@@ -1,6 +1,6 @@
 module;
 
-export module cact.core.strat:fixed_array;
+export module cactus.core.strat:fixed_array;
 
 import std;
 

@@ -1,5 +1,5 @@
 import std;
-import cact;
+import cactus;
 
 using namespace cact;
 

@@ -1,5 +1,5 @@
-export module cact.core;
+export module cactus.core;
 
-export import cact.core.ecs;
-export import cact.core.strat;
-export import cact.core.spines;
+export import cactus.core.ecs;
+export import cactus.core.strat;
+export import cactus.core.spines;

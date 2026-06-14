@@ -2,9 +2,9 @@ module;
 
 #include <climits>
 
-export module cact.core.ecs;
+export module cactus.core.ecs;
 
-import cact.core.strat;
+import cactus.core.strat;
 export import :utils;
 
 using namespace cact::detail::ecs;

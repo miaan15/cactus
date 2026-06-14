@@ -1,5 +1,5 @@
 import cactus_test;
-import cact;
+import cactus;
 
 using namespace cact;
 

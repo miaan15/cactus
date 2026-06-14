@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.29)
 # Check Clang
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/require_clang.cmake)
 
-project(cactus LANGUAGES CXX)
+project(cactus LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -16,9 +16,9 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 # Check libc++
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/require_libcxx.cmake)
 
-# ---------------------------------------------------------
+# ----------------------------------------------------------------------------------------
 # Options
-# ---------------------------------------------------------
+# ----------------------------------------------------------------------------------------
 # Build type
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Build type" FORCE)
@@ -26,9 +26,6 @@ endif()
 
 # Asan
 option(USE_ASAN "Enable AddressSanitizer" OFF)
-
-# Build lib
-option(BUILD_LIB "Build as library" OFF)
 
 # Lib type
 option(BUILD_SHARED_LIBS "Build as shared/dynamic library" OFF)
@@ -39,9 +36,9 @@ option(CACTUS_BUILD_DEMOS "Build the demos" OFF)
 # Test
 option(CACTUS_BUILD_TESTS "Build the unit tests" OFF)
 
-# ---------------------------------------------------------
+# ----------------------------------------------------------------------------------------
 # Platforms
-# ---------------------------------------------------------
+# ----------------------------------------------------------------------------------------
 if(WIN32)
     message(STATUS "Platform: Windows")
 elseif(APPLE)
@@ -52,15 +49,15 @@ else()
     message(WARNING "Platform: Unknown")
 endif()
 
-# ---------------------------------------------------------
+# ----------------------------------------------------------------------------------------
 # Vendors
-# ---------------------------------------------------------
+# ----------------------------------------------------------------------------------------
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/vendor_sdl.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/vendor_glm.cmake)
 
-# ---------------------------------------------------------
+# ----------------------------------------------------------------------------------------
 # Vars
-# ---------------------------------------------------------
+# ----------------------------------------------------------------------------------------
 set(VENDOR_DIR ${CMAKE_SOURCE_DIR}/vendor)
 set(MODULE_DIR ${CMAKE_SOURCE_DIR}/modules)
 set(SRC_DIR ${CMAKE_SOURCE_DIR}/src)
@@ -71,11 +68,16 @@ set(INC_DIRS
     ${GLM_INCLUDE_DIR}
 )
 file(GLOB_RECURSE SRCS CONFIGURE_DEPENDS "${SRC_DIR}/*.cpp")
-file(GLOB_RECURSE SRC_MODULES CONFIGURE_DEPENDS "${SRC_DIR}/*.cppm")
+file(GLOB_RECURSE SRC_CPPM CONFIGURE_DEPENDS "${SRC_DIR}/*.cppm")
 
-# ---------------------------------------------------------
+set(LIBS
+    ${SDL_TARGET}
+    ${GLM_TARGET}
+)
+
+# ----------------------------------------------------------------------------------------
 # Flags
-# ---------------------------------------------------------
+# ----------------------------------------------------------------------------------------
 if(USE_ASAN)
     add_compile_options(-fsanitize=address -fno-omit-frame-pointer -g)
     add_link_options(-fsanitize=address)
@@ -98,39 +100,26 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug ")
     )
 endif()
 
-# ---------------------------------------------------------
-# Create target
-# ---------------------------------------------------------
-# Modules
-set(MODULE_FILES
-    ${SRCS}
-    ${SRC_MODULES}
-    ${MODULE_DIR}/std/std.cppm
-    ${MODULE_DIR}/sdl/sdl.cppm
-    ${GLM_MODULE_SOURCE}
-)
-set(LIBS
-    ${SDL_TARGET}
-    ${GLM_TARGET}
+# ----------------------------------------------------------------------------------------
+# Cactus Library
+# ----------------------------------------------------------------------------------------
+add_library(cactus)
+
+target_sources(cactus PUBLIC 
+    FILE_SET CXX_MODULES FILES 
+        ${SRCS}
+        ${SRC_CPPM}
+        ${MODULE_DIR}/std/std.cppm
+        ${MODULE_DIR}/sdl/sdl.cppm
+        ${GLM_MODULE_SOURCE}
 )
 
-# ---------------------------------------------------------
-# To lib
-# ---------------------------------------------------------
-if(BUILD_LIB)
-    add_library(cactus ${SRCS})
+target_include_directories(cactus PUBLIC ${INC_DIRS})
+target_link_libraries(cactus PUBLIC ${LIBS})
 
-    target_sources(cactus PUBLIC 
-        FILE_SET CXX_MODULES FILES ${MODULE_FILES}
-    )
-
-    target_include_directories(cactus PUBLIC ${INC_DIRS})
-    target_link_libraries(cactus PUBLIC ${LIBS})
-endif()
-
-# ---------------------------------------------------------
+# ----------------------------------------------------------------------------------------
 # Demo
-# ---------------------------------------------------------
+# ----------------------------------------------------------------------------------------
 if(CACTUS_BUILD_DEMOS)
     function(create_target_demo DEMO_NAME DEMO_SRC_DIR)
         add_executable(${DEMO_NAME} "${DEMO_SRC_DIR}/main.cpp")
@@ -143,13 +132,11 @@ if(CACTUS_BUILD_DEMOS)
         )
 
         target_sources(${DEMO_NAME} PRIVATE 
-            FILE_SET CXX_MODULES FILES ${MODULE_FILES} ${DEMO_SRCS}
+            FILE_SET CXX_MODULES FILES ${DEMO_SRCS}
         )
 
-        target_include_directories(${DEMO_NAME} PRIVATE 
-            ${INC_DIRS}
-        )
-        target_link_libraries(${DEMO_NAME} PRIVATE ${LIBS})
+        target_include_directories(${DEMO_NAME} PRIVATE ${INC_DIRS})
+        target_link_libraries(${DEMO_NAME} PRIVATE cactus)
     endfunction()
 
     file(GLOB_RECURSE DEMO_MAIN_SRCS CONFIGURE_DEPENDS "${DEMO_DIR}/*main.cpp")
@@ -163,9 +150,9 @@ if(CACTUS_BUILD_DEMOS)
     endforeach()
 endif()
 
-# ---------------------------------------------------------
+# ----------------------------------------------------------------------------------------
 # Test
-# ---------------------------------------------------------
+# ----------------------------------------------------------------------------------------
 if(CACTUS_BUILD_TESTS)
     enable_testing()
 
@@ -182,10 +169,8 @@ if(CACTUS_BUILD_TESTS)
             FILE_SET CXX_MODULES FILES ${MODULE_FILES} ${TEST_LIB_SRC}
         )
 
-        target_include_directories(${TEST_NAME} PRIVATE 
-            ${INC_DIRS}
-        )
-        target_link_libraries(${TEST_NAME} PRIVATE ${LIBS})
+        target_include_directories(${TEST_NAME} PRIVATE ${INC_DIRS})
+        target_link_libraries(${TEST_NAME} PRIVATE cactus)
 
         add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
     endfunction()

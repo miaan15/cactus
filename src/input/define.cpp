@@ -2,7 +2,7 @@ module;
 
 #include <SDL3/SDL_scancode.h>
 
-export module cact.input:define;
+export module cactus.input:define;
 
 namespace cact {
 

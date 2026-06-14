@@ -2,7 +2,7 @@ module;
 
 #include <climits>
 
-export module cact.core.strat:slot_map;
+export module cactus.core.strat:slot_map;
 
 import std;
 import :dynamic_array;

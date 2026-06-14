@@ -1,9 +1,9 @@
 module;
 
-export module cact.core.spines:document;
+export module cactus.core.spines:document;
 
-import cact.common;
-import cact.core.strat;
+import cactus.common;
+import cactus.core.strat;
 
 namespace cact {
 

@@ -1,6 +1,6 @@
 module;
 
-export module cact.core.strat:hash_map;
+export module cactus.core.strat:hash_map;
 
 import std;
 import :assert;
