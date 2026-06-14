@@ -205,8 +205,11 @@ struct World {
         auto component_data_list = FixedArray<ComponentData>::make(component_count);
 
         [&]<std::size_t... Is>(std::index_sequence<Is...>) {
-            (..., component_data_list.set(
-                      Is, {component_utils_t::template get_size<Is>(), component_utils_t::template get_align<Is>()}));
+            (...,
+                component_data_list.set(
+                    Is,
+                    {component_utils_t::template get_size<Is>(), component_utils_t::template get_align<Is>()})
+            );
         }(std::make_index_sequence<sizeof...(Ts)>{});
 
         return World{.entities_data = SlotMap<EntityData>::make(),
@@ -479,7 +482,8 @@ struct World {
 
         char *cur_row_ptr = (char *)cur_table->get_row_ptr(cur_row_index);
         char *new_row_ptr = (char *)new_table->get_row_ptr(new_table->len - 1);
-        for (auto new_signature_ull = new_signature.to_ullong(); new_signature_ull > 0;
+        for (auto new_signature_ull = new_signature.to_ullong();
+             new_signature_ull > 0;
              new_signature_ull &= (new_signature_ull - 1)) {
             size_t t_component_index = __builtin_ctzll(new_signature_ull);
             auto t_component_data = component_data_list.get(t_component_index);
@@ -723,7 +727,7 @@ struct WorldQuery {
         [[nodiscard]] value_type operator*() const {
             auto *table = source->world_ref->tables.get_ptr(cur_table_index);
             return {
-                table->owner_list_raw[cur_row_index], 
+                table->owner_list_raw[cur_row_index],
                 PrefabQuery{.table_ref = table, .cur_row_index = cur_row_index}};
         }
 
@@ -763,7 +767,7 @@ struct WorldQuery {
     [[nodiscard]] iterator end() const { return iterator{this, world_ref->tables.len, 0}; }
 };
 
-template <typename... Ts> 
+template <typename... Ts>
 struct WorldQueryBuilder {
     using world_t = World<Ts...>;
 
@@ -772,7 +776,7 @@ struct WorldQueryBuilder {
     Signature signature;
 
     // ========================================================================
-    explicit WorldQueryBuilder(world_t *world_ref) 
+    explicit WorldQueryBuilder(world_t *world_ref)
         : world_ref(world_ref)
         , signature(Signature{}) {}
     ~WorldQueryBuilder() = default;
@@ -791,8 +795,8 @@ struct WorldQueryBuilder {
         return *this;
     }
 
-    [[nodiscard]] WorldQuery<Ts...> build() const { 
-        return WorldQuery<Ts...>(world_ref, signature); 
+    [[nodiscard]] WorldQuery<Ts...> build() const {
+        return WorldQuery<Ts...>(world_ref, signature);
     }
 };
 

@@ -3,6 +3,7 @@
 import burningfloor.common;
 import burningfloor.input;
 import burningfloor.player;
+import burningfloor.enemy;
 
 using namespace bf;
 
@@ -36,6 +37,7 @@ int main() {
     handle_input_init();
 
     handle_player_init(renderer);
+    handle_enemies_init(renderer);
 
     bool running = true;
     u64 last_time_ns = SDL_GetTicksNS();
@@ -72,6 +74,8 @@ int main() {
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
         SDL_RenderClear(renderer);
 
+        handle_enemies_render(renderer);
+
         SDL_RenderTextureRotated(
             renderer,
             player_render_data.texture,
@@ -88,6 +92,8 @@ int main() {
     handle_input_destroy();
 
     handle_player_destroy();
+
+    handle_enemies_destroy();
 
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);

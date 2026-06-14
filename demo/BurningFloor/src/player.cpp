@@ -85,6 +85,10 @@ auto handle_player_init(SDL_Renderer *renderer) {
 
     player_doc.destroy();
 
+    std::cout << "player data: " << "\n";
+    std::cout << "+ move_speed:\t" << player_data.move_speed << "\n";
+    std::cout << "+ attack_duration:\t" << player_data.attack_duration << "\n";
+
     // Params
     player_params.cur_frame_index = 0;
 }
@@ -92,9 +96,6 @@ auto handle_player_init(SDL_Renderer *renderer) {
 auto handle_player_logic_update(double cur_time_sec) {
     bool attack_input_down = attack_input_action.as<bool>() && !attack_input_action.last_as<bool>();
     glm::vec2 move_input = move_input_action.as<glm::vec2>();
-
-    std::println("attack {}", attack_input_down);
-    std::println("move {} {}", move_input.x, move_input.y);
 
     if (!player_params.is_attacking && attack_input_down) {
         player_params.is_attacking = true;

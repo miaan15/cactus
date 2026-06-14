@@ -62,14 +62,14 @@ export struct SpinesDocument {
     bool parsed = false;
 
     [[nodiscard]] static auto make() noexcept -> SpinesDocument {
-        return SpinesDocument{.spines_source{},
+        return SpinesDocument{.spines_source = std::string(),
                               .tokens = DynamicArray<Token>::make(),
                               .data = DynamicArray<data_t>::make(),
                               .string_data = DynamicArray<char>::make(),
                               .identifier_data_list = DynamicArray<IdentifierData>::make(),
                               .next_identifier_id = 0,
                               .next_string_data_index = 0,
-                              .parsed = true};
+                              .parsed = false};
     }
     auto destroy() {
         tokens.destroy();
@@ -426,7 +426,7 @@ private:
 public:
     struct Accessor {
         enum struct Error { 
-            NO_DATA,
+            NO_DATA = 0,
             NAME_NOT_FOUND,
             INDEX_OUT_OF_BOUND,
             INVALID_OPERATION,
