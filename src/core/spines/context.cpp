@@ -432,7 +432,7 @@ public:
         };
         std::optional<Error> error{};
 
-        SpinesContext *doc_ref = nullptr;
+        SpinesContext *cxt_ref = nullptr;
 
         size_t chain_depth = 0;
 
@@ -440,78 +440,78 @@ public:
         std::optional<size_t> data_offset{};
 
         [[nodiscard]] Accessor pick(std::string_view name) noexcept {
-            if (error.has_value()) return Accessor{error, doc_ref, chain_depth};
+            if (error.has_value()) return Accessor{error, cxt_ref, chain_depth};
 
-            _assert(doc_ref != nullptr, "Document reference is null.");
-            _assert(cur_identifier_index < doc_ref->identifier_data_list.len, "cur_identifier_index is out of bounds.");
+            _assert(cxt_ref != nullptr, "Document reference is null.");
+            _assert(cur_identifier_index < cxt_ref->identifier_data_list.len, "cur_identifier_index is out of bounds.");
 
-            IdentifierData cur_identifier_data = doc_ref->identifier_data_list.get(cur_identifier_index).value();
+            IdentifierData cur_identifier_data = cxt_ref->identifier_data_list.get(cur_identifier_index).value();
 
             if (data_offset.has_value()) 
-                return Accessor{Error::INVALID_OPERATION, doc_ref, chain_depth + 1};
+                return Accessor{Error::INVALID_OPERATION, cxt_ref, chain_depth + 1};
 
             size_t search_start = cur_identifier_index + 1;
             size_t search_end = cur_identifier_index + cur_identifier_data.parent_len;
-            _assert(search_end <= doc_ref->identifier_data_list.len, "Search range exceeds identifier_data_list bounds.");
+            _assert(search_end <= cxt_ref->identifier_data_list.len, "Search range exceeds identifier_data_list bounds.");
 
             for (size_t i = search_start; i < search_end;) {
-                auto data = doc_ref->identifier_data_list.get(i).value();
+                auto data = cxt_ref->identifier_data_list.get(i).value();
 
-                _assert(data.name_offset_root + data.name_len <= doc_ref->spines_source.size(),
+                _assert(data.name_offset_root + data.name_len <= cxt_ref->spines_source.size(),
                         "String view out of bounds of spines_source.");
 
-                std::string_view cur_name{doc_ref->spines_source.data() + data.name_offset_root, data.name_len};
+                std::string_view cur_name{cxt_ref->spines_source.data() + data.name_offset_root, data.name_len};
                 if (cur_name == name)
-                    return Accessor{error, doc_ref, chain_depth + 1, i, {}};
+                    return Accessor{error, cxt_ref, chain_depth + 1, i, {}};
 
                 i += data.parent_len;
             }
 
-            return Accessor{Error::NAME_NOT_FOUND, doc_ref, chain_depth + 1};
+            return Accessor{Error::NAME_NOT_FOUND, cxt_ref, chain_depth + 1};
         }
 
         [[nodiscard]] Accessor pick(size_t index) noexcept {
-            if (error.has_value()) return Accessor{error, doc_ref, chain_depth};
+            if (error.has_value()) return Accessor{error, cxt_ref, chain_depth};
 
-            _assert(doc_ref != nullptr, "Document reference is null.");
-            _assert(cur_identifier_index < doc_ref->identifier_data_list.len, "cur_identifier_index is out of bounds.");
+            _assert(cxt_ref != nullptr, "Document reference is null.");
+            _assert(cur_identifier_index < cxt_ref->identifier_data_list.len, "cur_identifier_index is out of bounds.");
 
-            IdentifierData cur_identifier_data = doc_ref->identifier_data_list.get(cur_identifier_index).value();
+            IdentifierData cur_identifier_data = cxt_ref->identifier_data_list.get(cur_identifier_index).value();
 
             if (data_offset.has_value()) 
-                return Accessor{Error::INVALID_OPERATION, doc_ref, chain_depth + 1};
+                return Accessor{Error::INVALID_OPERATION, cxt_ref, chain_depth + 1};
 
             if (index >= cur_identifier_data.data_len) {
-                return Accessor{Error::INDEX_OUT_OF_BOUND, doc_ref, chain_depth + 1};
+                return Accessor{Error::INDEX_OUT_OF_BOUND, cxt_ref, chain_depth + 1};
             }
 
-            return Accessor{error, doc_ref, chain_depth + 1, cur_identifier_index, index};
+            return Accessor{error, cxt_ref, chain_depth + 1, cur_identifier_index, index};
         }
 
         template <typename T> [[nodiscard]] std::expected<T, std::pair<Error, size_t>> as() const noexcept {
             auto data_index_opt = handle_pre_check_on_get_data_index();
             if (!data_index_opt.has_value()) return std::unexpected{data_index_opt.error()};
 
-            auto val = doc_ref->data.get(data_index_opt.value()).value();
+            auto val = cxt_ref->data.get(data_index_opt.value()).value();
 
             if constexpr (std::is_same_v<T, std::string_view> || std::is_same_v<T, std::string>) {
                 if (!std::holds_alternative<unsigned int>(val))
                     return std::unexpected{std::make_pair(Error::WRONG_VALUE_TYPE, chain_depth + 1)};
 
                 unsigned int str_idx = std::get<unsigned int>(val);
-                _assert(str_idx < doc_ref->string_data.len, "String index out of bounds of string_data container.");
+                _assert(str_idx < cxt_ref->string_data.len, "String index out of bounds of string_data container.");
 
-                const char* string_raw = doc_ref->string_data.get_ptr(str_idx);
+                const char* string_raw = cxt_ref->string_data.get_ptr(str_idx);
                 _assert(string_raw, "String data should not be null");
 
-                if (string_raw - doc_ref->string_data.data >= doc_ref->string_data.len)
+                if (string_raw - cxt_ref->string_data.data >= cxt_ref->string_data.len)
                     return std::unexpected{std::make_pair(Error::STRING_OVERFLOW, chain_depth + 1)};
 
                 size_t string_size = 0;
                 for (const char *string_it = string_raw; *string_it != '\0'; ++string_it) {
                     ++string_size;
 
-                    if (string_raw + string_size - doc_ref->string_data.data > doc_ref->string_data.len) 
+                    if (string_raw + string_size - cxt_ref->string_data.data > cxt_ref->string_data.len) 
                         return std::unexpected{std::make_pair(Error::STRING_OVERFLOW, chain_depth + 1)};
                 }
 
@@ -535,7 +535,7 @@ public:
             auto data_index_opt = handle_pre_check_on_get_data_index();
             if (!data_index_opt.has_value()) return std::unexpected{data_index_opt.error()};
 
-            auto val = doc_ref->data.get_ptr(data_index_opt.value());
+            auto val = cxt_ref->data.get_ptr(data_index_opt.value());
 
             if (!std::holds_alternative<int>(*val)) 
                 return std::unexpected{std::make_pair(Error::WRONG_VALUE_TYPE, chain_depth + 1)};
@@ -545,7 +545,7 @@ public:
             auto data_index_opt = handle_pre_check_on_get_data_index();
             if (!data_index_opt.has_value()) return std::unexpected{data_index_opt.error()};
 
-            auto val = doc_ref->data.get_ptr(data_index_opt.value());
+            auto val = cxt_ref->data.get_ptr(data_index_opt.value());
 
             if (!std::holds_alternative<float>(*val)) 
                 return std::unexpected{std::make_pair(Error::WRONG_VALUE_TYPE, chain_depth + 1)};
@@ -555,25 +555,25 @@ public:
             auto data_index_opt = handle_pre_check_on_get_data_index();
             if (!data_index_opt.has_value()) return std::unexpected{data_index_opt.error()};
 
-            auto val = doc_ref->data.get(data_index_opt.value()).value();
+            auto val = cxt_ref->data.get(data_index_opt.value()).value();
 
             if (!std::holds_alternative<unsigned int>(val))
                 return std::unexpected{std::make_pair(Error::WRONG_VALUE_TYPE, chain_depth + 1)};
 
             unsigned int str_idx = std::get<unsigned int>(val);
-            _assert(str_idx < doc_ref->string_data.len, "String index out of bounds of string_data container.");
+            _assert(str_idx < cxt_ref->string_data.len, "String index out of bounds of string_data container.");
 
-            char* string_raw = doc_ref->string_data.get_ptr(str_idx);
+            char* string_raw = cxt_ref->string_data.get_ptr(str_idx);
             _assert(string_raw, "String data should not be null");
 
-            if (string_raw - doc_ref->string_data.data >= doc_ref->string_data.len)
+            if (string_raw - cxt_ref->string_data.data >= cxt_ref->string_data.len)
                 return std::unexpected{std::make_pair(Error::STRING_OVERFLOW, chain_depth + 1)};
 
             size_t string_size = 0;
             for (const char *string_it = string_raw; *string_it != '\0'; ++string_it) {
                 ++string_size;
 
-                if (string_raw + string_size - doc_ref->string_data.data > doc_ref->string_data.len) 
+                if (string_raw + string_size - cxt_ref->string_data.data > cxt_ref->string_data.len) 
                     return std::unexpected{std::make_pair(Error::STRING_OVERFLOW, chain_depth + 1)};
             }
 
@@ -593,10 +593,10 @@ public:
         std::expected<size_t, std::pair<Error, size_t>> handle_pre_check_on_get_data_index() const noexcept {
             if (error.has_value()) return std::unexpected{std::make_pair(error.value(), chain_depth)};
 
-            _assert(doc_ref != nullptr, "Document reference is null.");
-            _assert(cur_identifier_index < doc_ref->identifier_data_list.len, "cur_identifier_index is out of bounds.");
+            _assert(cxt_ref != nullptr, "Document reference is null.");
+            _assert(cur_identifier_index < cxt_ref->identifier_data_list.len, "cur_identifier_index is out of bounds.");
 
-            IdentifierData cur_identifier_data = doc_ref->identifier_data_list.get(cur_identifier_index).value();
+            IdentifierData cur_identifier_data = cxt_ref->identifier_data_list.get(cur_identifier_index).value();
 
             size_t offset = data_offset.value_or(0);
             if (!data_offset.has_value() && cur_identifier_data.data_len > 1) {
@@ -604,7 +604,7 @@ public:
             }
 
             size_t data_index = cur_identifier_data.data_point_to_index + offset;
-            _assert(data_index < doc_ref->data.len, "data_index is out of bounds.");
+            _assert(data_index < cxt_ref->data.len, "data_index is out of bounds.");
 
             return data_index;
         }
