@@ -164,8 +164,10 @@ module;
 #  endif // __has_include(<text_encoding>)
 #endif // _WIN32
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wreserved-module-identifier"
 export module std;
-
+#pragma clang diagnostic pop
 
 #include "std/algorithm.inc"
 #include "std/any.inc"

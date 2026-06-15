@@ -10,7 +10,7 @@ export namespace bf {
 cact::DynamicArray<SDL_Texture *> enemy_texture_list =
     cact::DynamicArray<SDL_Texture *>::make();
 
-// ============================================================================
+// =============================================================================
 struct EnemySprite {
     size_t texture_index;
     SDL_FRect rect;
@@ -19,7 +19,7 @@ struct EnemySprite {
 cact::DynamicArray<EnemySprite> enemy_sprite_list =
     cact::DynamicArray<EnemySprite>::make();
 
-// ============================================================================
+// =============================================================================
 struct EnemyRenderData {
     SDL_Texture *texture;
     SDL_FRect src_rect;
@@ -27,7 +27,7 @@ struct EnemyRenderData {
     SDL_FlipMode flip = SDL_FlipMode::SDL_FLIP_NONE;
 };
 
-// ============================================================================
+// =============================================================================
 
 struct DummyData {
     float health;
@@ -40,7 +40,7 @@ struct DummyParams {
     glm::vec2 pos;
 };
 
-// ============================================================================
+// =============================================================================
 enum struct EnemyType {
     DUMMY,
 };
@@ -52,7 +52,7 @@ struct EnemyEntity {
     };
 };
 
-// ============================================================================
+// =============================================================================
 // TODO
 constexpr size_t DUMMY_SPRITE_INDEX = 0;
 
@@ -61,16 +61,19 @@ cact::DynamicArray<EnemyEntity> enemy_entity_list =
 
 void handle_enemies_init(SDL_Renderer *renderer) {
     // TEXTURE
-    // ========================================================================
+    // =========================================================================
     auto handle_fail_surface = [](const stdf::path &path) {
-        std::cerr << "Failed to load surface with " << path << " | Error: " << SDL_GetError() << std::endl;
+        std::cerr << "Failed to load surface with " << path
+                  << " | Error: " << SDL_GetError() << std::endl;
     };
     auto handle_fail_texture = [](const stdf::path &path) {
-        std::cerr << "Failed to load texture with " << path << " | Error: " << SDL_GetError() << std::endl;
+        std::cerr << "Failed to load texture with " << path
+                  << " | Error: " << SDL_GetError() << std::endl;
     };
 
     // Load dummy tex
-    const stdf::path dummy_tex_path = asset_dir / "image/img_enemy_dummy_00.png";
+    const stdf::path dummy_tex_path =
+        asset_dir / "image/img_enemy_dummy_00.png";
     SDL_Surface *dummy_surface = SDL_LoadPNG(dummy_tex_path.c_str());
     if (dummy_surface) {
         auto texture = SDL_CreateTextureFromSurface(renderer, dummy_surface);
@@ -86,14 +89,16 @@ void handle_enemies_init(SDL_Renderer *renderer) {
     }
 
     // SPRITE
-    // ========================================================================
+    // =========================================================================
     enemy_sprite_list.append(EnemySprite{0, {0, 0, 32, 32}});
 
     // DATA
-    // ========================================================================
+    // =========================================================================
     auto handle_fail_get_data = [](std::string_view name) {
         return [name](auto p) {
-            std::cerr << "Failed to get field [" << name << "] | Error: " << (int)p.first << " : " << p.second << std::endl;
+            std::cerr << "Failed to get field [" << name
+                      << "] | Error: " << (int)p.first << " : " << p.second
+                      << std::endl;
             return p;
         };
     };
@@ -103,12 +108,14 @@ void handle_enemies_init(SDL_Renderer *renderer) {
     enemy_data_context.parse(enemy_data_path);
 
     // Dummy data
-    dummy_data.health = enemy_data_context.pick("dummy").pick("health").as<float>()
-        .transform_error(handle_fail_get_data("dummy.health"))
-        .value_or(0);
-    dummy_data.move_speed = enemy_data_context.pick("dummy").pick("move_speed").as<float>()
-        .transform_error(handle_fail_get_data("dummy.move_speed"))
-        .value_or(0);
+    dummy_data.health =
+        enemy_data_context.pick("dummy").pick("health").as<float>()
+            .transform_error(handle_fail_get_data("dummy.health"))
+            .value_or(0);
+    dummy_data.move_speed =
+        enemy_data_context.pick("dummy").pick("move_speed").as<float>()
+            .transform_error(handle_fail_get_data("dummy.move_speed"))
+            .value_or(0);
 
     enemy_data_context.destroy();
 
@@ -117,7 +124,7 @@ void handle_enemies_init(SDL_Renderer *renderer) {
     std::cout << "+ move_speed:\t" << dummy_data.move_speed << "\n";
 
     // TEST
-    // ========================================================================
+    // =========================================================================
     enemy_entity_list.append(EnemyEntity{
         EnemyType::DUMMY,
         {},
@@ -127,7 +134,8 @@ void handle_enemies_init(SDL_Renderer *renderer) {
     });
 }
 
-void dummy_logic_update(DummyParams *dummy_params, const PlayerParams &player_params) {
+void dummy_logic_update(DummyParams *dummy_params,
+                        const PlayerParams &player_params) {
     glm::vec2 dir = player_params.pos - dummy_params->pos;
     dir = glm::normalize(dir);
 
@@ -151,7 +159,8 @@ void handle_enemies_frame_update() {
         switch (enemy_entity.type) {
         case EnemyType::DUMMY: {
             DummyParams params = enemy_entity.dummy_params;
-            EnemySprite sprite = enemy_sprite_list.get(DUMMY_SPRITE_INDEX).value();
+            EnemySprite sprite =
+                enemy_sprite_list.get(DUMMY_SPRITE_INDEX).value();
             render_data->texture =
                 enemy_texture_list.get(sprite.texture_index).value();
             render_data->src_rect = sprite.rect;

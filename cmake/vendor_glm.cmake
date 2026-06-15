@@ -1,10 +1,10 @@
-message(STATUS "Checking GLM...")
+message(STATUS "Checking glm...")
 
 set(VENDOR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vendor")
 set(GLM_VENDOR_SOURCE_DIR "${VENDOR_DIR}/glm")
 
 if(NOT IS_DIRECTORY "${GLM_VENDOR_SOURCE_DIR}")
-    message(STATUS "Cloning GLM to ${GLM_VENDOR_SOURCE_DIR}")
+    message(STATUS "Cloning glm to ${GLM_VENDOR_SOURCE_DIR}")
     execute_process(
         COMMAND bash -c [[
             set -e
@@ -14,7 +14,7 @@ if(NOT IS_DIRECTORY "${GLM_VENDOR_SOURCE_DIR}")
         RESULT_VARIABLE SCRIPT_RESULT
     )
     if(NOT SCRIPT_RESULT EQUAL 0)
-        message(FATAL_ERROR "Fetching GLM failed: ${SCRIPT_RESULT}")
+        message(FATAL_ERROR "Fetching glm failed: ${SCRIPT_RESULT}")
         file(REMOVE_RECURSE "${GLM_VENDOR_SOURCE_DIR}")
     endif()
 endif()
@@ -30,4 +30,4 @@ set(GLM_TARGET ${GLM_TARGET})
 set(GLM_INCLUDE_DIR ${GLM_INCLUDE_DIR})
 set(GLM_MODULE_SOURCE "${GLM_VENDOR_SOURCE_DIR}/glm/glm.cppm")
 
-message(STATUS "GLM Ready.")
+message(STATUS "glm Ready.")

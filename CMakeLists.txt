@@ -54,6 +54,7 @@ endif()
 # ----------------------------------------------------------------------------------------
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/vendor_sdl.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/vendor_glm.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/vendor_box2d.cmake)
 
 # ----------------------------------------------------------------------------------------
 # Vars
@@ -66,6 +67,7 @@ set(TEST_DIR ${CMAKE_SOURCE_DIR}/test)
 set(INC_DIRS
     ${SDL_INCLUDE_DIR}
     ${GLM_INCLUDE_DIR}
+    ${BOX2D_INCLUDE_DIR}
 )
 file(GLOB_RECURSE SRCS CONFIGURE_DEPENDS "${SRC_DIR}/*.cpp")
 file(GLOB_RECURSE SRC_CPPM CONFIGURE_DEPENDS "${SRC_DIR}/*.cppm")
@@ -112,6 +114,7 @@ target_sources(cactus PUBLIC
         ${MODULE_DIR}/std/std.cppm
         ${MODULE_DIR}/sdl/sdl.cppm
         ${GLM_MODULE_SOURCE}
+        ${MODULE_DIR}/box2d/box2d.cppm
 )
 
 target_include_directories(cactus PUBLIC ${INC_DIRS})
